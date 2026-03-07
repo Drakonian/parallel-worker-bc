@@ -21,6 +21,10 @@ codeunit 99002 "PW Task Dispatcher"
         Rec."Session Id" := SessionId();
         Rec."Started At" := CurrentDateTime();
         Rec.Modify();
+        // Must commit Running status before TryFunction.
+        // TryFunction rolls back on worker failure — without this commit,
+        // the Running status would be lost and we couldn't distinguish
+        // "never started" from "started and failed".
         Commit();
 
         ChunkContext.Init(Rec);
@@ -31,6 +35,10 @@ codeunit 99002 "PW Task Dispatcher"
             Rec.Status := "PW Chunk Status"::Completed;
             Rec."Completed At" := CurrentDateTime();
             Rec.Modify();
+            // Persist chunk's Completed status before updating batch counters.
+            // If UpdateBatchCounters fails (e.g. lock timeout on PW Batch),
+            // the chunk is still correctly marked as Completed.
+            // The next finishing chunk will recompute counters correctly.
             Commit();
         end else begin
             ErrorText := GetLastErrorText();
@@ -41,6 +49,8 @@ codeunit 99002 "PW Task Dispatcher"
             Rec.Status := "PW Chunk Status"::Failed;
             Rec."Completed At" := CurrentDateTime();
             Rec.Modify();
+            // Same safety as success path — persist Failed status
+            // before attempting batch counter update.
             Commit();
         end;
 
@@ -48,10 +58,15 @@ codeunit 99002 "PW Task Dispatcher"
     end;
 
     [TryFunction]
+    [CommitBehavior(CommitBehavior::Error)]
     local procedure TryExecuteWorker(WorkerType: Enum "PW Worker Type"; var Context: Codeunit "PW Chunk Context")
     var
         Worker: Interface "PW IParallel Worker";
     begin
+        // CommitBehavior::Error prevents workers from calling Commit() inside Execute.
+        // If a worker calls Commit(), a runtime error is raised immediately.
+        // TryFunction catches it and the chunk is marked Failed with a clear error.
+        // This enforces the "no Commit inside workers" rule at the platform level.
         Worker := WorkerType;
         Worker.Execute(Context);
     end;
@@ -95,6 +110,9 @@ codeunit 99002 "PW Task Dispatcher"
         end;
 
         Batch.Modify();
+        // Release the LockTable lock acquired above.
+        // Without this commit, the lock is held until the session ends,
+        // blocking other chunks that are finishing concurrently.
         Commit();
     end;
 }
