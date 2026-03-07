@@ -34,6 +34,7 @@ codeunit 99000 "PW Batch Coordinator"
         TotalCount: Integer;
         Threads: Integer;
         ChunkSize: Integer;
+        ChunkCount: Integer;
         StartIdx: Integer;
         EndIdx: Integer;
         ChunkPayload: JsonObject;
@@ -52,14 +53,15 @@ codeunit 99000 "PW Batch Coordinator"
         if TotalCount < Threads then
             Threads := TotalCount;
         ChunkSize := (TotalCount + Threads - 1) div Threads;
+        ChunkCount := (TotalCount + ChunkSize - 1) div ChunkSize;
 
-        BatchId := CreateBatch(WorkerType, Threads);
+        BatchId := CreateBatch(WorkerType, ChunkCount);
         BasePayload.WriteTo(PayloadText);
         FilterView := RecRef.GetView();
         TableNo := RecRef.Number();
 
         StartIdx := 1;
-        for i := 1 to Threads do begin
+        for i := 1 to ChunkCount do begin
             EndIdx := StartIdx + ChunkSize - 1;
             if EndIdx > TotalCount then
                 EndIdx := TotalCount;
@@ -75,8 +77,6 @@ codeunit 99000 "PW Batch Coordinator"
             CreateChunk(BatchId, i, ChunkPayload);
 
             StartIdx := EndIdx + 1;
-            if StartIdx > TotalCount then
-                break;
         end;
 
         // Must commit batch and chunk records before StartSession.
@@ -92,6 +92,7 @@ codeunit 99000 "PW Batch Coordinator"
         BatchId: Guid;
         Threads: Integer;
         ChunkSize: Integer;
+        ChunkCount: Integer;
         StartIdx: Integer;
         EndIdx: Integer;
         ChunkPayload: JsonObject;
@@ -109,12 +110,13 @@ codeunit 99000 "PW Batch Coordinator"
         if Items.Count() < Threads then
             Threads := Items.Count();
         ChunkSize := (Items.Count() + Threads - 1) div Threads;
+        ChunkCount := (Items.Count() + ChunkSize - 1) div ChunkSize;
 
-        BatchId := CreateBatch(WorkerType, Threads);
+        BatchId := CreateBatch(WorkerType, ChunkCount);
         BasePayload.WriteTo(PayloadText);
 
         StartIdx := 1;
-        for i := 1 to Threads do begin
+        for i := 1 to ChunkCount do begin
             EndIdx := StartIdx + ChunkSize - 1;
             if EndIdx > Items.Count() then
                 EndIdx := Items.Count();
@@ -130,8 +132,6 @@ codeunit 99000 "PW Batch Coordinator"
             CreateChunk(BatchId, i, ChunkPayload);
 
             StartIdx := EndIdx + 1;
-            if StartIdx > Items.Count() then
-                break;
         end;
 
         // Must commit batch and chunk records before StartSession.

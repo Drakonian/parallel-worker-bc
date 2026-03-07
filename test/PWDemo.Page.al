@@ -15,10 +15,17 @@ page 99100 "PW Demo"
             {
                 Caption = 'Input';
 
-                field(TableNo; TableNo)
+                field(TaskCount; TaskCount)
                 {
-                    Caption = 'Table No.';
-                    ToolTip = 'The table to count records from.';
+                    Caption = 'Task Count';
+                    ToolTip = 'Number of work items to process.';
+                    MinValue = 1;
+                }
+                field(WorkDurationMs; WorkDurationMs)
+                {
+                    Caption = 'Work Duration (ms)';
+                    ToolTip = 'Simulated work time per item in milliseconds.';
+                    MinValue = 50;
                 }
                 field(ThreadCount; ThreadCount)
                 {
@@ -34,21 +41,28 @@ page 99100 "PW Demo"
 
                 field(StatusText; StatusText)
                 {
-                    Caption = 'Batch Status';
+                    Caption = 'Status';
                     ToolTip = 'Final status of the batch.';
                     Editable = false;
                 }
-                field(TotalRecords; TotalRecords)
+                field(ExpectedSequentialMs; ExpectedSequentialMs)
                 {
-                    Caption = 'Total Records Counted';
-                    ToolTip = 'Sum of records counted across all chunks.';
+                    Caption = 'Expected Sequential (ms)';
+                    ToolTip = 'How long this would take in a single thread.';
                     Editable = false;
                 }
                 field(ElapsedMs; ElapsedMs)
                 {
-                    Caption = 'Elapsed (ms)';
-                    ToolTip = 'Time taken for the batch to complete.';
+                    Caption = 'Actual Parallel (ms)';
+                    ToolTip = 'How long the parallel execution actually took.';
                     Editable = false;
+                }
+                field(Speedup; Speedup)
+                {
+                    Caption = 'Speedup';
+                    ToolTip = 'Expected sequential time divided by actual parallel time.';
+                    Editable = false;
+                    DecimalPlaces = 1 : 1;
                 }
             }
             group(ChunkResults)
@@ -58,7 +72,7 @@ page 99100 "PW Demo"
                 field(ChunkDetails; ChunkDetails)
                 {
                     Caption = 'Details';
-                    ToolTip = 'Per-chunk record counts.';
+                    ToolTip = 'Per-chunk processing details.';
                     Editable = false;
                     MultiLine = true;
                 }
@@ -70,20 +84,21 @@ page 99100 "PW Demo"
     {
         area(Promoted)
         {
-            actionref(RunParallelRef; RunParallel) { }
+            actionref(RunRef; Run) { }
         }
         area(Processing)
         {
-            action(RunParallel)
+            action(Run)
             {
-                Caption = 'Run Parallel Count';
-                ToolTip = 'Count all records in the specified table using parallel workers.';
+                Caption = 'Run';
+                ToolTip = 'Run the parallel work simulation.';
                 Image = Start;
 
                 trigger OnAction()
                 var
                     Coordinator: Codeunit "PW Batch Coordinator";
-                    RecRef: RecordRef;
+                    Items: List of [Text];
+                    Payload: JsonObject;
                     Results: List of [JsonObject];
                     Errors: List of [Text];
                     ResultObj: JsonObject;
@@ -91,29 +106,28 @@ page 99100 "PW Demo"
                     BatchId: Guid;
                     StartTime: DateTime;
                     ChunkIdx: Integer;
-                    ChunkCount: Integer;
+                    ItemsProcessed: Integer;
                     DetailsBuilder: TextBuilder;
                     ErrorText: Text;
+                    i: Integer;
                 begin
-                    if TableNo = 0 then
-                        Error('Please enter a Table No.');
-
                     Clear(StatusText);
-                    Clear(TotalRecords);
                     Clear(ElapsedMs);
+                    Clear(Speedup);
                     Clear(ChunkDetails);
 
-                    RecRef.Open(TableNo);
-                    if RecRef.IsEmpty() then begin
-                        StatusText := 'Table is empty.';
-                        exit;
-                    end;
+                    ExpectedSequentialMs := TaskCount * WorkDurationMs;
+
+                    for i := 1 to TaskCount do
+                        Items.Add(Format(i));
+
+                    Payload.Add('WorkDurationMs', WorkDurationMs);
 
                     StartTime := CurrentDateTime();
                     BatchId := Coordinator
                         .SetThreads(ThreadCount)
-                        .SetTimeout(120)
-                        .RunForRecords("PW Worker Type"::SampleCount, RecRef, EmptyPayload());
+                        .SetTimeout(300)
+                        .RunForList("PW Worker Type"::Sample, Items, Payload);
 
                     if IsNullGuid(BatchId) then begin
                         StatusText := 'Nothing to process.';
@@ -121,20 +135,23 @@ page 99100 "PW Demo"
                     end;
 
                     if Coordinator.WaitForCompletion(BatchId) then begin
-                        StatusText := 'Completed';
                         ElapsedMs := CurrentDateTime() - StartTime;
+                        StatusText := 'Completed';
+                        if ElapsedMs > 0 then
+                            Speedup := ExpectedSequentialMs / ElapsedMs;
 
                         Coordinator.GetResults(BatchId, Results);
                         foreach ResultObj in Results do begin
                             ResultObj.Get('ChunkIndex', Token);
                             ChunkIdx := Token.AsValue().AsInteger();
-                            ResultObj.Get('RecordCount', Token);
-                            ChunkCount := Token.AsValue().AsInteger();
-                            TotalRecords += ChunkCount;
-                            DetailsBuilder.AppendLine(StrSubstNo('Chunk %1: %2 records', ChunkIdx, ChunkCount));
+                            ResultObj.Get('ItemsProcessed', Token);
+                            ItemsProcessed := Token.AsValue().AsInteger();
+                            DetailsBuilder.AppendLine(
+                                StrSubstNo('Chunk %1: %2 items', ChunkIdx, ItemsProcessed));
                         end;
                         ChunkDetails := DetailsBuilder.ToText();
                     end else begin
+                        ElapsedMs := CurrentDateTime() - StartTime;
                         StatusText := Format(Coordinator.GetStatus(BatchId));
 
                         Coordinator.GetErrors(BatchId, Errors);
@@ -150,22 +167,19 @@ page 99100 "PW Demo"
     }
 
     var
-        TableNo: Integer;
+        TaskCount: Integer;
+        WorkDurationMs: Integer;
         ThreadCount: Integer;
         StatusText: Text;
-        TotalRecords: Integer;
+        ExpectedSequentialMs: BigInteger;
         ElapsedMs: BigInteger;
+        Speedup: Decimal;
         ChunkDetails: Text;
 
     trigger OnOpenPage()
     begin
+        TaskCount := 20;
+        WorkDurationMs := 200;
         ThreadCount := 4;
-    end;
-
-    local procedure EmptyPayload(): JsonObject
-    var
-        Payload: JsonObject;
-    begin
-        exit(Payload);
     end;
 }
