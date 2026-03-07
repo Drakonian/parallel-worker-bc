@@ -1,0 +1,32 @@
+{
+  "id": "bc6b1896-b11b-44b6-a5ba-4581e67dc6ca",
+  "name": "Parallel Worker",
+  "publisher": "Volodymyr Dvernytskyi",
+  "version": "1.0.0.0",
+  "brief": "",
+  "description": "",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [],
+  "screenshots": [],
+  "platform": "27.0.0.0",
+  "application": "27.0.0.0",
+  "idRanges": [
+    {
+      "from": 99000,
+      "to": 99200
+    }
+  ],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "16.0",
+  "features": [
+    "NoImplicitWith"
+  ]
+}

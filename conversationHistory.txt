@@ -1,0 +1,1787 @@
+Let’s say I know that a lot of languages have multi tasking or multi threading mechanisms, GO, C#, Scala and so on 
+
+There is several mechanisms in Business Central: task scheduler, job queue, start session and so on
+
+But there is no good library to work with tasks in Business Central AL language, as in other programming languages. Even when AL language evolving, with a lot of new features like interfaces/ternary operators/this keyword it’s still lack of that library.
+
+Based on best practices from another programming languages, and AL language what is the best way to create such library? How it can looks and how it can works? So it will be useful and easy to use
+
+
+This is a really interesting architectural challenge. AL has all the primitives but lacks the orchestration layer. Let me break down how a proper task library could be designed.
+
+---
+
+## Core Constraints to Design Around
+
+Before picking patterns, AL's runtime model forces some hard constraints:
+
+- **No shared memory** — sessions are isolated, so all state must go through the database
+- **No generics** — you can't do `Task<T>`, so you need serialization conventions (JSON)
+- **No async/await** — polling is the only option for "waiting"
+- **Sessions are expensive** — you want pooling or batching, not one session per micro-task
+
+---
+
+## Architecture: Three Layers
+
+```
+┌──────────────────────────────────────────────┐
+│  Consumer API  (TaskManager, TaskFuture)      │  ← what devs interact with
+├──────────────────────────────────────────────┤
+│  Execution Engine  (Runner, Dispatcher)       │  ← how work gets scheduled
+├──────────────────────────────────────────────┤
+│  State Store  (AL Task table + Result table)  │  ← DB as the "heap"
+└──────────────────────────────────────────────┘
+```
+
+---
+
+## 1. The `ITask` Interface — Define Work
+
+Inspired by `Runnable`/`IHostedService` from Java/C#:
+
+```al
+interface "ITask"
+{
+    /// <summary>Execute the task. Read input via TaskContext, write results back.</summary>
+    procedure Execute(var TaskContext: Codeunit "Task Context");
+}
+```
+
+The `TaskContext` acts like Go's `context.Context` — it carries the task ID, input payload, cancellation state, and lets you write results:
+
+```al
+codeunit "Task Context"
+{
+    procedure GetTaskId(): Guid;
+    procedure GetInput(): JsonObject;           // deserialized input
+    procedure SetResult(Result: JsonObject);    // write result back to DB
+    procedure IsCancellationRequested(): Boolean;
+    procedure ReportProgress(Percent: Decimal; Message: Text);
+}
+```
+
+---
+
+## 2. State Store — The "Heap"
+
+Two tables carry all the cross-session state:
+
+```al
+table "AL Task"
+{
+    fields
+    {
+        field(1; Id; Guid) { }
+        field(2; Status; Enum "Task Status") { }   // Pending/Running/Completed/Failed/Cancelled
+        field(3; CodeunitId; Integer) { }          // which codeunit implements ITask
+        field(4; InputPayload; Blob) { }           // JSON input
+        field(5; ResultPayload; Blob) { }          // JSON result
+        field(6; ErrorMessage; Text[2048]) { }
+        field(7; ErrorCallStack; Blob) { }
+        field(8; CreatedAt; DateTime) { }
+        field(9; StartedAt; DateTime) { }
+        field(10; CompletedAt; DateTime) { }
+        field(11; CancellationRequested; Boolean) { }
+        field(12; TimeoutSeconds; Integer) { }
+        field(13; RetryCount; Integer) { }
+        field(14; MaxRetries; Integer) { }
+        field(15; ParentTaskId; Guid) { }         // for WhenAll grouping
+        field(16; SessionId; Integer) { }         // to detect crashed sessions
+        field(17; ProgressPercent; Decimal) { }
+        field(18; ProgressMessage; Text[250]) { }
+    }
+}
+```
+
+---
+
+## 3. Task Status Enum
+
+Inspired by C# `TaskStatus` but simplified:
+
+```al
+enum "Task Status"
+{
+    value(0; Pending) { Caption = 'Pending'; }
+    value(1; Running) { Caption = 'Running'; }
+    value(2; Completed) { Caption = 'Completed'; }
+    value(3; Failed) { Caption = 'Failed'; }
+    value(4; Cancelled) { Caption = 'Cancelled'; }
+    value(5; TimedOut) { Caption = 'Timed Out'; }
+    value(6; WaitingForChildren) { Caption = 'Waiting'; }  // WhenAll parent
+}
+```
+
+---
+
+## 4. `TaskManager` — The Factory (Consumer-Facing API)
+
+This is what developers actually call. Inspired by C#'s `Task.Run()` and Go's `go func()`:
+
+```al
+codeunit "Task Manager"
+{
+    // --- Fire & Forget ---
+    procedure Run(CodeunitId: Integer): Guid;
+    procedure Run(CodeunitId: Integer; Input: JsonObject): Guid;
+
+    // --- Fire & Forget with options ---
+    procedure RunWithOptions(CodeunitId: Integer; Input: JsonObject; Options: Codeunit "Task Options"): Guid;
+
+    // --- Returns a Future you can await ---
+    procedure StartAsync(CodeunitId: Integer; Input: JsonObject): Codeunit "Task Future";
+
+    // --- Combinators (like Promise.all / Task.WhenAll) ---
+    procedure WhenAll(TaskIds: List of [Guid]): Codeunit "Task Future";
+    procedure WhenAny(TaskIds: List of [Guid]): Codeunit "Task Future";
+
+    // --- Control ---
+    procedure Cancel(TaskId: Guid): Boolean;
+    procedure GetStatus(TaskId: Guid): Enum "Task Status";
+
+    // --- Cleanup ---
+    procedure Cleanup(OlderThanHours: Integer);
+}
+```
+
+**Usage example:**
+
+```al
+// Fire and forget
+TaskManager.Run(Codeunit::"Send Email Task", InputJson);
+
+// Await a result (polling under the hood)
+Future := TaskManager.StartAsync(Codeunit::"Generate Report Task", InputJson);
+if Future.Await(TimeoutSeconds := 30) then begin
+    Result := Future.GetResult();
+    // use Result...
+end else
+    Error('Task timed out or failed: %1', Future.GetErrorMessage());
+```
+
+---
+
+## 5. `TaskFuture` — The Promise Object
+
+Inspired by C# `Task<T>` and JavaScript `Promise`. Since AL can't return values from `StartSession`, this polls the DB:
+
+```al
+codeunit "Task Future"
+{
+    var
+        TaskId: Guid;
+        PollIntervalMs: Integer;  // default 500ms
+
+    // Blocking poll until done or timeout
+    procedure Await(TimeoutSeconds: Integer): Boolean;
+
+    // Non-blocking checks
+    procedure IsCompleted(): Boolean;
+    procedure IsSucceeded(): Boolean;
+    procedure IsFailed(): Boolean;
+    procedure IsCancelled(): Boolean;
+
+    // Result access
+    procedure GetResult(): JsonObject;
+    procedure GetErrorMessage(): Text;
+    procedure GetProgress(): Decimal;
+
+    // Continuation (callback pattern via interface)
+    procedure OnSuccess(Callback: Interface "ITaskCallback");
+    procedure OnFailure(Callback: Interface "ITaskFailureCallback");
+
+    // Chaining (like .then() in JS / .ContinueWith() in C#)
+    procedure ContinueWith(CodeunitId: Integer): Codeunit "Task Future";
+
+    procedure GetTaskId(): Guid;
+}
+```
+
+---
+
+## 6. `TaskOptions` — Configuration Object
+
+Fluent builder pattern, inspired by C#'s `TaskCreationOptions`:
+
+```al
+codeunit "Task Options"
+{
+    procedure WithTimeout(Seconds: Integer): Codeunit "Task Options";
+    procedure WithMaxRetries(Count: Integer): Codeunit "Task Options";
+    procedure WithRetryDelay(Seconds: Integer): Codeunit "Task Options";
+    procedure WithPriority(Priority: Enum "Task Priority"): Codeunit "Task Options";
+    procedure UseJobQueue(): Codeunit "Task Options";      // use Job Queue instead of StartSession
+    procedure UseTaskScheduler(): Codeunit "Task Options"; // use Task Scheduler
+    procedure WithTag(Tag: Text[100]): Codeunit "Task Options";
+}
+```
+
+**Usage:**
+
+```al
+Options := TaskOptions
+    .WithTimeout(60)
+    .WithMaxRetries(3)
+    .WithRetryDelay(5)
+    .UseJobQueue();
+
+TaskManager.RunWithOptions(Codeunit::"Heavy Batch Task", InputJson, Options);
+```
+
+---
+
+## 7. The Execution Runner — How Work Actually Runs
+
+The dispatcher codeunit is what `StartSession` actually calls:
+
+```al
+codeunit "Task Dispatcher"
+{
+    // Entry point called by StartSession
+    procedure ExecuteTask(TaskId: Guid);
+    
+    local procedure ClaimTask(TaskId: Guid): Boolean;      // optimistic lock via MODIFY
+    local procedure MarkRunning(TaskId: Guid);
+    local procedure MarkCompleted(TaskId: Guid; Result: JsonObject);
+    local procedure MarkFailed(TaskId: Guid; Err: ErrorInfo);
+    local procedure CheckTimeout(Task: Record "AL Task"): Boolean;
+    local procedure ShouldRetry(Task: Record "AL Task"): Boolean;
+    local procedure ScheduleRetry(var Task: Record "AL Task");
+}
+```
+
+The key trick for **crash detection** — store the `SessionId` when claiming a task. A monitoring job can detect sessions that died and re-queue their tasks.
+
+---
+
+## 8. `WhenAll` / `WhenAny` — Combinators
+
+These are the most powerful patterns, inspired by `Promise.all` and Go's `select`:
+
+```al
+// WhenAll: groups tasks under a virtual parent, resolves when all children complete
+procedure WhenAll(TaskIds: List of [Guid]): Codeunit "Task Future"
+var
+    ParentId: Guid;
+    TaskId: Guid;
+begin
+    ParentId := CreateGroupTask(Enum::"Task Status"::WaitingForChildren);
+    foreach TaskId in TaskIds do
+        LinkChildTask(TaskId, ParentId);
+    
+    Future.Init(ParentId);  // Future polls the parent
+    exit(Future);
+end;
+```
+
+The parent transitions to `Completed` once all children are `Completed`, or to `Failed` if any child fails.
+
+---
+
+## 9. Implementing a Task — Developer Experience
+
+This is what an extension author writes:
+
+```al
+codeunit "Send Notification Task" implements "ITask"
+{
+    procedure Execute(var Ctx: Codeunit "Task Context")
+    var
+        Input: JsonObject;
+        UserId: Text;
+        Message: Text;
+    begin
+        Input := Ctx.GetInput();
+        UserId := Input.GetText('userId');
+        Message := Input.GetText('message');
+
+        // Check cancellation periodically in long-running work
+        if Ctx.IsCancellationRequested() then
+            exit;
+
+        Ctx.ReportProgress(50, 'Sending...');
+        SendNotification(UserId, Message);
+        Ctx.ReportProgress(100, 'Done');
+
+        Ctx.SetResult(BuildResultJson(true, 'Notification sent'));
+    end;
+}
+```
+
+Clean, testable, no awareness of sessions or scheduling.
+
+---
+
+## Summary: Feature Matrix
+
+| Feature | Mechanism | Inspired By |
+|---|---|---|
+| Fire & forget | `StartSession` | Go `go func()` |
+| Awaitable future | DB polling loop | C# `Task<T>` |
+| Cancellation | DB flag + poll in task | C# `CancellationToken` |
+| Timeout | Stored deadline + watcher | Go `context.WithTimeout` |
+| WhenAll / WhenAny | Parent task grouping | JS `Promise.all` |
+| Retry | Dispatcher re-queue | Polly / Resilience4j |
+| Progress | DB progress field | C# `IProgress<T>` |
+| Continuation | Chain new task on complete | JS `.then()` |
+| Crash recovery | Session ID heartbeat | Erlang supervisor |
+| Scheduling | Job Queue backend option | Quartz / Hangfire |
+
+---
+
+The most impactful thing about this design is that it **hides the session/DB complexity completely** behind the `ITask` interface. A developer just implements `Execute()` and calls `TaskManager.Run()` — they never touch `StartSession`, `TaskScheduler`, or raw table writes directly. That's exactly the gap that exists today in AL.
+
+Would you want to explore implementing any specific layer first — the state table schema, the future/polling mechanism, or the `WhenAll` combinator logic?
+
+What problems we might have with this approach? What risks to use heap table? What is difference with job queue and task scheduler in Business Central?
+
+
+Great questions — let's stress-test the design honestly.
+
+---
+
+## Problems With the Approach Overall
+
+### 1. Sessions Are Not Free
+
+`StartSession` spins up a full BC service tier session. It consumes a license, memory, and a connection. If your library makes it trivially easy to call `TaskManager.Run()` in a loop, you can accidentally DoS your own tenant — especially on SaaS where session limits are enforced hard. There's no built-in throttling or pool in AL the way thread pools exist in .NET.
+
+### 2. No Real Blocking Primitive
+
+`TaskFuture.Await()` has to poll the database in a loop with `Sleep()`. This means the **calling session is held open and consuming a connection the entire wait time**. In C# `await` releases the thread. In AL you can't do that — you're burning a session doing nothing but checking a table. For UI scenarios this is especially bad because you're blocking the web client session.
+
+### 3. Distributed Locking Is Hard
+
+When multiple sessions try to claim the same pending task, you need optimistic concurrency. AL's `MODIFY` with record version checks can work, but if not designed carefully you get race conditions where two sessions both claim the same task. This is a classic problem even in mature job queue systems.
+
+### 4. No Structured Cancellation Propagation
+
+The cancellation flag in the DB is cooperative — the task has to poll `IsCancellationRequested()` itself. If a task developer forgets to check it, or has a long synchronous call inside Execute(), cancellation is effectively ignored. There's no way to forcibly terminate a running session from AL.
+
+### 5. Debugging and Observability Are Poor
+
+When a task fails in a background session, the error and callstack are only as good as what you captured and wrote to the DB. AL telemetry from `StartSession` callbacks is disconnected from the calling context. Correlating logs across sessions in Application Insights requires deliberate effort — you need to pass and propagate a correlation ID manually.
+
+### 6. Serialization Is Your Problem
+
+Because there are no generics, everything goes through `JsonObject`. This means runtime errors instead of compile-time type safety. A typo in a field name, a wrong assumed type — these only surface when the task actually runs, not at build time. No equivalent of C#'s `Task<TResult>` type safety.
+
+---
+
+## Risks Specific to the Heap Table
+
+This is actually the most serious category of risks.
+
+### Table Lock Contention
+
+A single "AL Task" table becomes a **hotspot**. Every task creation, status update, progress report, and poll hits the same table. In SQL Server terms, this means heavy row-level and page-level locking activity on one object. Under load — say 50 concurrent tasks all updating their progress fields every second — you'll see lock waits and deadlocks that impact unrelated business logic if they share the same transaction scope.
+
+BC's default `ReadIsolation` and `LockTimeout` settings are tuned for business document workflows, not high-frequency polling tables.
+
+### Table Size and Bloat
+
+If you don't aggressively clean up completed tasks, this table grows unbounded. Payload blobs (InputPayload, ResultPayload, ErrorCallStack) can be large. BC cloud environments have database size limits that directly affect licensing costs. A library that makes it easy to fire tasks but doesn't enforce cleanup is a liability.
+
+### Replication and Upgrade Risk
+
+Custom tables in BC extensions go through sync and upgrade processes. If the schema changes between extension versions, you need migration codeunits. A task that was "Running" before an upgrade might be orphaned in an inconsistent state post-upgrade. There's no automatic migration of in-flight tasks.
+
+### Transactional Boundary Problems
+
+This is subtle but critical. In BC, if the calling transaction is rolled back, the task record insert is also rolled back — **but the `StartSession` call already fired**. The session is running, looking for a task record that no longer exists. You need to use `Commit()` before `StartSession`, which means you're explicitly breaking the calling transaction boundary. This is an anti-pattern in BC that surprises developers and can cause partial data states.
+
+Conversely, if the task itself writes business data and then the task session crashes before marking itself Complete, you can have orphaned business records with no corresponding completed task — a silent data integrity problem.
+
+### Multi-Company Environments
+
+`StartSession` can target a specific company, but your task table needs to correctly scope records per company. If a developer calls `TaskManager.Run()` in Company A but the dispatcher reads from the wrong company context, tasks silently disappear. BC's `CHANGECOMPANY` patterns add complexity to what should be simple dispatch logic.
+
+### Crash Recovery Is Eventually Consistent
+
+Your session ID heartbeat idea for crash detection works — but it's only as timely as your monitoring job. If a session crashes and the monitor runs every 5 minutes, tasks appear "Running" to anyone polling for up to 5 minutes. During that window, dependent tasks waiting on `WhenAll` are stuck. This is an **availability gap** with no clean solution in AL.
+
+---
+
+## Job Queue vs Task Scheduler — The Real Differences
+
+These are often confused but serve fundamentally different purposes.
+
+### Job Queue
+
+The Job Queue is a **business-oriented, persistent, recurring scheduler**. It is:
+
+- Fully managed by BC with its own UI (`Job Queue Entries` page)
+- Designed for recurring or one-shot background processing like posting batches, sending emails, running reports
+- Recoverable — if BC restarts, pending jobs resume
+- Visible and controllable by end users and admins
+- Subject to `Job Queue Category` grouping, which limits concurrency per category
+- Each entry runs a codeunit implementing `OnRun`
+- Has built-in retry, error logging, and notification on failure
+- Persists across server restarts because it's just table records
+
+**The key limitation**: You cannot easily pass structured input to a Job Queue entry at runtime. You can abuse parameter fields, but there's no clean `JsonObject` input mechanism. It's designed for "run this codeunit on a schedule" not "run this codeunit with these arguments right now."
+
+It also has **significant startup latency** — the Job Queue dispatcher wakes up periodically (typically every 30 seconds to a few minutes depending on configuration), so it's not suitable for near-real-time task execution.
+
+### Task Scheduler
+
+`TaskScheduler.CreateTask()` is a **lower-level, fire-and-forget, one-shot mechanism**. It:
+
+- Schedules a codeunit to run at or after a specific datetime
+- Has no built-in retry, progress, or error surfacing — errors are logged to the BC event log only
+- Cannot be cancelled once created (no cancellation API)
+- Has no status you can query from AL — it's truly fire and forget
+- Is not visible to end users at all
+- Persists across restarts (stored in system tables)
+- Runs with the same company and user context as the creator
+
+The major problem is **no return channel whatsoever**. You schedule it, it runs or it doesn't, and you have no programmatic way to know which.
+
+### StartSession
+
+`StartSession` is the **rawest primitive** — it spins up a session immediately (or very soon), runs a codeunit, and that's it. It:
+
+- Has the lowest latency of the three
+- Does NOT persist across server restarts — if BC restarts while the session is running, the session dies with no recovery
+- Has no built-in error handling visible to the caller
+- Can be given parameters via a record — but only a single record variant, not flexible input
+- Is consumed against your session license immediately
+- Returns a `SessionId` you can use to check if the session is still alive via `Session.IsSessionActive()`
+
+### Summary Table
+
+| Dimension | Job Queue | Task Scheduler | StartSession |
+|---|---|---|---|
+| Survives restart | ✅ Yes | ✅ Yes | ❌ No |
+| Latency | ⚠️ Minutes | ⚠️ Scheduled time | ✅ Immediate |
+| Structured input | ❌ Awkward | ❌ None | ⚠️ Single record |
+| Error surfacing | ✅ Built-in UI | ❌ Event log only | ❌ None |
+| Cancellable | ✅ Via UI | ❌ No | ⚠️ Kill session only |
+| Status queryable | ✅ Table | ❌ No | ⚠️ IsSessionActive only |
+| Concurrency control | ✅ Categories | ❌ None | ❌ None |
+| Recurrence | ✅ Built-in | ❌ Manual re-schedule | ❌ No |
+| User visibility | ✅ Yes | ❌ No | ❌ No |
+| Best for | Recurring batch work | Delayed one-shot work | Immediate parallel work |
+
+---
+
+## What This Means for Your Library Design
+
+Given all of the above, the honest conclusion is that your library should **not pick one mechanism** — it should be a strategy abstraction over all three, with the `TaskOptions` choosing the right backend:
+
+- Short-lived, immediate, fire-and-forget with a result → `StartSession`
+- Must survive a server restart → `Task Scheduler` or `Job Queue`
+- Recurring work, visible to admins, needs retry UI → `Job Queue`
+- Delayed execution at a specific time → `Task Scheduler`
+
+The heap table risks can be mitigated by treating it as a **short-lived coordination table** (tasks auto-deleted after N hours), separating payload blobs into a child table to reduce hotspot row size, and always committing before dispatching to handle the transaction boundary problem cleanly.
+
+The deeper truth is that AL's model is fundamentally **share-nothing with a database as the only IPC mechanism** — which is actually similar to how Erlang and actor systems work, just without the language-level support. The library's job is to make that feel invisible.
+
+So based on these thoughts you will keep same plan for that library?
+
+Honestly, no. The first design was too optimistic — it borrowed patterns from languages where the runtime actually supports them. After stress-testing it, I'd make several fundamental changes.
+
+---
+
+## What I'd Drop Completely
+
+### `TaskFuture.Await()` — Remove It
+
+A blocking poll loop that holds a session open is worse than the problem it solves. It gives developers a false sense of familiar async/await semantics while silently burning a session doing nothing. Languages that have `await` release the thread — AL cannot. This API would be misused constantly.
+
+Replace it entirely with the **continuation pattern only** — `OnSuccess` / `OnFailure` callbacks via interface. If you need a result in the UI, you use a page that refreshes via polling on the client side, not a blocking server-side loop.
+
+### `WhenAll` / `WhenAny` as First-Class API — Simplify It
+
+The parent task grouping mechanism is clever but adds a lot of complexity to the state machine for a feature most developers won't use correctly. It stays as an internal mechanism but gets a much simpler surface area — just a status page, not a programmable combinator.
+
+### Single Heap Table — Split It
+
+One hot table for everything is a SQL contention problem. It needs to be split from the start.
+
+---
+
+## Revised Architecture
+
+### Three Tables Instead of One
+
+```
+"AL Task"          → identity, status, metadata only (small rows, high frequency writes)
+"AL Task Payload"  → input/result blobs (written once, read once, then deleted)
+"AL Task Log"      → errors, callstack, progress history (append-only, separate hotspot)
+```
+
+Small rows on the main task table means less page contention. Blobs in a child table means the status polling query never touches large data. The log table being append-only is much friendlier to SQL's lock manager.
+
+### Backend Strategy Is Mandatory, Not Optional
+
+In the first design `TaskOptions.UseJobQueue()` was an option. In the revised design you **must** declare your backend explicitly — there's no default. The library refuses to pick for you because the tradeoffs are too significant to hide:
+
+```al
+// This is now a compile-time enforced choice
+TaskManager
+    .ForBackground()          // StartSession — immediate, no restart survival
+    .Run(Codeunit::"My Task", InputJson);
+
+TaskManager
+    .ForScheduled(RunAfter)   // TaskScheduler — delayed, survives restart  
+    .Run(Codeunit::"My Task", InputJson);
+
+TaskManager
+    .ForQueue('BATCH')        // Job Queue — recurring, admin-visible, retryable
+    .Run(Codeunit::"My Task", InputJson);
+```
+
+This forces the developer to think about the tradeoff rather than discovering it in production.
+
+### Commit Boundary Is Explicit and Documented
+
+The transaction problem — where `StartSession` fires but the inserting transaction rolls back — gets handled by a dedicated dispatch codeunit that always owns its own `Commit()`. It's not hidden. The API documentation clearly states: **calling Run() commits the current transaction scope for the task record**. Developers who don't want that use the scheduled or queue backends instead.
+
+### Cancellation Gets Honest
+
+Instead of pretending cancellation is reliable, the API exposes two distinct operations:
+
+```al
+TaskManager.RequestCancellation(TaskId);  // sets the flag, no guarantee
+TaskManager.ForceTerminate(TaskId);       // kills the session if still active, data may be inconsistent
+```
+
+`ForceTerminate` is deliberately scary-looking. It logs a warning to telemetry. Developers who call it know they're accepting potential data inconsistency.
+
+### Crash Recovery Is a Separate Scheduled Job
+
+Rather than baking crash detection into the library's core, it becomes an explicit optional component — a Job Queue entry that runs every few minutes and requeues tasks whose session IDs are no longer active. It's opt-in, visible to admins, and its latency gap is documented: **tasks may appear stuck for up to the monitor interval after a crash**.
+
+### Payload Serialization Gets a Typed Wrapper
+
+Since there are no generics, the library ships a `TaskPayload` helper that at least centralizes the JsonObject access patterns and throws meaningful errors:
+
+```al
+codeunit "Task Payload"
+{
+    procedure SetText(Key: Text; Value: Text);
+    procedure SetInteger(Key: Text; Value: Integer);
+    procedure SetDecimal(Key: Text; Value: Decimal);
+    procedure SetBoolean(Key: Text; Value: Boolean);
+    
+    procedure GetText(Key: Text): Text;
+    procedure GetInteger(Key: Text): Integer;
+    // ... etc
+    
+    // Fails fast with a clear error rather than silent wrong value
+    procedure RequireText(Key: Text): Text;
+}
+```
+
+Not type safety, but at least fail-fast with useful error messages instead of silent wrong-type reads.
+
+---
+
+## What Stays the Same
+
+The `ITask` interface stays — it's the right abstraction and genuinely clean. The three-layer architecture (Consumer API / Execution Engine / State Store) stays. The `TaskOptions` fluent builder stays but becomes mandatory rather than optional.
+
+---
+
+## Honest Assessment
+
+Even with these changes, the library solves a real problem but carries **inherent ceiling**. AL's share-nothing session model means you will never get true task parallelism with shared memory, you will always have a database as your IPC channel, and you will always have observable latency compared to native threading. The library's job is to make that ceiling **clear and predictable** rather than hidden — which the first design failed to do.
+
+The revised version is less ambitious and more honest. That's usually the right direction.
+
+Great. Now let’s think about usage scenarios and when it will actually bring value to developers
+
+Good question to ask before writing a single line of code. Let me think through this honestly — because some scenarios where developers *think* they need this library actually don't need it at all.
+
+---
+
+## First: When You Don't Need This Library
+
+It's worth being explicit about the anti-patterns first.
+
+**Don't use it for simple posting routines.** If you're posting a sales order in the background, Job Queue Entry already solves this perfectly and gives you admin visibility, retry UI, and restart survival out of the box. Adding this library on top adds complexity with no gain.
+
+**Don't use it to avoid fixing slow synchronous code.** If a codeunit takes 30 seconds because it's doing 500 individual record reads without bulk operations, the right fix is to optimize the codeunit — not push it to a background session.
+
+**Don't use it for anything that needs transactional consistency with the caller.** If the background work must either fully succeed or fully roll back together with what the caller is doing, background sessions fundamentally cannot provide that. This is a design smell.
+
+---
+
+## Scenarios Where It Actually Brings Value
+
+### 1. Parallel Data Processing That Has No Natural BC Primitive
+
+This is the clearest win. Imagine you need to recalculate inventory valuation for 10,000 items at month-end. Sequentially this takes 45 minutes. The items are independent of each other — there's no reason they need to run serially.
+
+```al
+// Split items into buckets, run buckets in parallel
+foreach Bucket in ItemBuckets do begin
+    Payload.SetText('RangeFrom', Bucket.From);
+    Payload.SetText('RangeTo', Bucket.To);
+    TaskManager
+        .ForBackground()
+        .Run(Codeunit::"Recalculate Valuation Task", Payload.ToJson());
+end;
+```
+
+With 10 parallel sessions each handling 1,000 items, you go from 45 minutes to roughly 5-6 minutes. No BC primitive does this naturally — Job Queue runs entries sequentially within a category, Task Scheduler has no coordination, `StartSession` alone has no orchestration.
+
+The value here is **wall-clock time reduction for genuinely parallelizable batch work**.
+
+### 2. Fire-and-Forget Side Effects That Shouldn't Block the User
+
+A user confirms a large sales order. Your business logic needs to: notify the warehouse, update a Power BI dataset via API, send a customer confirmation email, and log to an external audit system. None of these affect whether the order confirmation itself succeeds.
+
+Without the library, developers either block the user waiting for all four calls, or they write four separate `StartSession` calls with zero coordination or error visibility.
+
+With the library:
+
+```al
+// Order confirmation commits, user gets response immediately
+// These run independently, failures are logged and visible
+TaskManager.ForBackground().Run(Codeunit::"Notify Warehouse Task", OrderPayload);
+TaskManager.ForBackground().Run(Codeunit::"Refresh PowerBI Task", OrderPayload);
+TaskManager.ForBackground().Run(Codeunit::"Send Confirmation Email Task", OrderPayload);
+TaskManager.ForBackground().Run(Codeunit::"Audit Log Task", OrderPayload);
+```
+
+The value is **UI responsiveness** and **separation of core business logic from side effects** — with centralized visibility into what happened to each side effect.
+
+### 3. Long-Running External API Calls
+
+External API calls are where BC's synchronous model hurts most. If you're calling a slow ERP integration, a document recognition service, or an AI endpoint that takes 10-20 seconds, you cannot reasonably block the BC web client session — it will time out or the user will just stare at a spinner.
+
+The pattern becomes: submit the work, return immediately, poll for completion from the UI.
+
+```al
+// User uploads a document, kicks off OCR processing
+TaskId := TaskManager
+    .ForBackground()
+    .WithTimeout(120)
+    .Run(Codeunit::"OCR Processing Task", DocumentPayload);
+
+// Store TaskId on the record
+DocumentHeader."Processing Task Id" := TaskId;
+DocumentHeader.Modify();
+
+// Page refreshes every few seconds, checks TaskManager.GetStatus(TaskId)
+// When Complete, reads result and populates fields
+```
+
+This is a pattern that's extremely common in modern web applications — BC just has no built-in way to express it. The library provides the coordination layer.
+
+### 4. Dependent Task Chains
+
+Some workflows have natural sequential dependencies but with parallelism within each stage. Generate a report, then when that's done, send it to three recipients simultaneously, then when all three are confirmed, archive the report.
+
+Without orchestration primitives this becomes deeply nested callbacks or fragile polling code scattered across codeunits. The library lets you express the dependency graph cleanly through continuations.
+
+The value here is **workflow expressiveness** — making the dependency structure visible in code rather than implicit in timing assumptions.
+
+### 5. Resilient Integration Patterns
+
+When integrating with external systems that are occasionally unavailable — payment gateways, logistics APIs, government reporting endpoints — you want retry with backoff, not just immediate failure. The library's retry mechanism with `WithMaxRetries` and `WithRetryDelay` gives you this without every developer reinventing it per-integration.
+
+This is honestly one of the most practically valuable scenarios because flaky external systems are extremely common in BC implementations and the current answer is usually a hand-rolled Job Queue entry per integration with duplicated retry logic.
+
+---
+
+## Scenarios That Seem Valuable But Are Traps
+
+### "Making the UI feel faster"
+
+If your page action takes 2 seconds, pushing it to background doesn't make it faster — it makes it *invisible*. The user now has to go find out what happened. This is only acceptable when the operation genuinely doesn't need to block the user (side effects, notifications). For operations the user needs a result from, background processing adds friction, not removes it.
+
+### "Replacing the Job Queue entirely"
+
+The Job Queue has one massive advantage this library never will: **it's built into BC, visible to partners and admins, and supported by Microsoft**. Any recurring operational process — nightly posting, scheduled cleanup, regular synchronization — belongs in Job Queue. The library complements it, it doesn't replace it.
+
+### "High-frequency short tasks"
+
+If you need to process 10,000 tiny operations per minute, spinning up sessions isn't the right model. The session overhead dominates the actual work time. This is a data pipeline problem that belongs in Azure Functions or a proper queue service, not inside BC sessions.
+
+---
+
+## The Honest Value Proposition
+
+Putting it plainly: this library brings real value in a specific sweet spot — **medium-duration, occasionally parallelizable, integration-heavy work where you need visibility into what happened**. 
+
+That covers probably 20-30% of the background processing scenarios that BC partners actually build. For the rest, Job Queue is fine or the work shouldn't be background at all.
+
+The library's secondary value is **standardization** — right now every BC partner reinvents this wheel differently, with different levels of error handling, observability, and reliability. A shared library raises the floor even when it doesn't dramatically change the architecture.
+
+Does any of these scenarios match what you're actually trying to solve, or are you thinking about this more as an ecosystem contribution for other developers to use?
+
+So, is it worth to create such library in AL?
+
+Honestly? Probably not as a full library. Let me explain why.
+
+---
+
+## The Core Problem
+
+Everything we've designed is fighting AL's runtime model rather than working with it. Every pattern — futures, cancellation, combinators, typed payloads — is a workaround for a constraint that AL itself imposes. You're not building on solid ground, you're building scaffolding around missing ground.
+
+In Go or C#, a task library **exposes** what the runtime already supports. In AL, a task library **simulates** what the runtime fundamentally doesn't support. That's a very different thing to maintain and trust in production.
+
+---
+
+## The Specific Reasons It's Not Worth It
+
+**The audience is too small.** BC partners who need genuine parallel processing and are sophisticated enough to use this library correctly are a tiny fraction of the ecosystem. Most partners run into the scenarios we described and solve them with Job Queue or a quick `StartSession` hack. A library that requires careful understanding of session limits, commit boundaries, and crash recovery windows has a high bar to use safely.
+
+**Microsoft will eventually close the gap.** AL is evolving fast — interfaces, ternary operators, the `this` keyword all arrived recently. Background task primitives are a known gap and Microsoft has more context on the service tier internals than any partner library ever will. Building a complex library on today's primitives risks being obsoleted or undermined by a platform change.
+
+**The failure modes are production-critical.** A bad task library in Go crashes a goroutine. A bad task library in AL can lock your database table, exhaust your session license, corrupt business data across companies, or create orphaned records that break financial audits. The blast radius of getting it wrong is much larger than in typical runtime environments.
+
+**Observability is genuinely unsolvable from AL.** You can write errors to a table, but correlating what happened across sessions in Application Insights, understanding why a session died mid-task, or debugging a deadlock on the task table — none of that is accessible from AL. You'll be shipping a library where the hardest problems are invisible to you and to the developers using it.
+
+---
+
+## What Is Worth Building Instead
+
+Rather than a general-purpose task library, there are three narrower things that would actually deliver value without the systemic risks:
+
+**A lightweight `StartSession` wrapper with structured error capture.** Just solving the observability problem — capturing errors, callstacks, and correlation IDs from background sessions into a queryable table — would be genuinely useful and is small enough to be trustworthy. No futures, no combinators, just "I fired a background session and here's what happened to it."
+
+**A typed Job Queue input convention.** The Job Queue's biggest practical limitation is awkward parameter passing. A small helper that serializes and deserializes a `JsonObject` into the Job Queue's parameter fields, with a base codeunit developers inherit from, solves a real daily friction point with almost no risk.
+
+**Per-integration retry codeunits.** Instead of a general retry mechanism inside a task library, publish a pattern — a base codeunit with `WithRetry` semantics that integration-specific codeunits inherit from. Concrete, testable, no shared state.
+
+---
+
+## The Honest Answer
+
+The library is a great thought experiment and the design work is genuinely valuable — it clarifies exactly why AL's background processing model is limited and what the tradeoffs are. That understanding is worth having.
+
+But shipping it as a library other developers depend on in production BC environments, given the session cost risks, the data integrity edge cases, the debugging opacity, and the small addressable audience — it's not worth the support burden and the liability of being the library that corrupted someone's general ledger.
+
+The better contribution to the ecosystem is probably a **detailed blog post** documenting these tradeoffs, the patterns, and the honest guidance on when to use what. That has broader reach, no maintenance burden, and helps partners make better decisions with the primitives they already have.
+
+Which, given vld-bc.com exists, you're already well positioned to write.
+
+In my article I have explained mechanisms for parallel reading which gives to me good results for my task. I thought to build library of what we discussed because of when I encountered with the problem I found there is no good library for that
+
+So I am unsure should I do anything at all, or at least simple interface for developers 
+
+https://vld-bc.com/blog/table-data-editor-for-bc-4-0#parallelreading
+
+Now I can give a much more grounded answer, having actually seen your implementation.
+
+---
+
+## What Your Code Reveals
+
+Your implementation is already pragmatic and honest about AL's constraints. Looking at it closely, a few things stand out.
+
+The pattern you built is fundamentally **read-specific**. The whole mechanism — `StartIndex`/`EndIndex` partitioning, `Record.Next(StartIndex)` jumping, merging temp buffers — is tightly coupled to the parallel reading use case. It's not a general task pattern, and that's actually fine. It solves the problem you had.
+
+The ugliest part of the code is this:
+
+```al
+case i of
+    1: ActiveSessionId := DataEditorMgt.ReadRecord(TempDataEditorBuffer1, ...);
+    2: ActiveSessionId := DataEditorMgt.ReadRecord(TempDataEditorBuffer2, ...);
+    // ... up to 8
+end;
+
+DataEditorMgt.MergeBufferData(Rec, TempDataEditorBuffer1, TempDataEditorBuffer2, ...8 params...);
+```
+
+This exists because of the array-of-temporary-records bug you documented — which you correctly called "absolute evil." And here's the critical point: **no library can fix this**. It's a platform constraint, not a design choice. Any library that tries to hide this will either cap threads at some hardcoded number or force developers to write the same workaround themselves.
+
+---
+
+## So What's Actually Worth Building?
+
+Given all of this, I'd say: **not a full task library, but one focused abstraction** — and it's not the one we originally designed.
+
+The real reusable pattern in your code is the **parallel batch coordinator**. Not task futures or combinators — just the thing that:
+
+- Splits a record range into N buckets
+- Fires N sessions with `StartSession`
+- Polls `IsSessionActive()` until all finish
+- Signals completion
+
+That coordinator is what other BC developers would actually copy-paste from your blog and get wrong. That's the thing worth packaging.
+
+It could be as simple as an interface pair:
+
+```al
+interface "IParallelBatchWorker"
+{
+    // Called in the background session
+    procedure Execute(StartIndex: Integer; EndIndex: Integer; Payload: JsonObject);
+}
+
+codeunit "Parallel Batch Coordinator"
+{
+    procedure Run(Worker: Interface "IParallelBatchWorker"; 
+                  TotalCount: Integer; 
+                  Threads: Integer; 
+                  Payload: JsonObject);
+}
+```
+
+Narrow scope, honest about what it can and can't do, no futures or cancellation theater. The thread-cap and the temp record merge problem stay documented as known constraints, not hidden behind an abstraction.
+
+---
+
+## The Honest Recommendation
+
+You already did the hard part — you solved the problem and documented it clearly. The blog post describing why you needed parallel reading, the `Record.Next(StartIndex)` trick, the array-of-temp-records gotcha, and the `IsSessionActive` polling pattern is **more valuable to the BC ecosystem than a library would be**. Developers can read it, understand it, and adapt it.
+
+If you do publish code, publish it as a small focused helper in the Data Editor repo with clear documentation — not as an independent library with its own lifecycle to maintain. The problem space is too narrow and the platform constraints too specific to justify a general-purpose library that you'd have to support across BC versions.
+
+The bigger contribution is the article. Which you already wrote.
+
+So, let’s design that batch worker, I assume we can do more than just record readings with that?
+
+Yes, definitely more than record reading. The pattern is really about **splitting any workload into independent chunks and running them concurrently**. Let me think through what that generalizes to.
+
+---
+
+## What the Pattern Actually Is
+
+Your Data Editor implementation has three distinct responsibilities that are worth separating cleanly:
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 1. SPLITTING    — how do you divide the work?        │
+│ 2. EXECUTING    — what does each chunk actually do?  │
+│ 3. COLLECTING   — how do results come back together? │
+└─────────────────────────────────────────────────────┘
+```
+
+In Data Editor, all three are hardcoded to one specific scenario. A general coordinator separates them.
+
+---
+
+## Beyond Record Reading — What Else Fits This Pattern
+
+Before designing the interfaces, it's worth establishing what workloads are actually parallelizable this way:
+
+**Fits well:**
+- Parallel record reading (your case)
+- Parallel external API calls — call 6 vendor endpoints simultaneously instead of sequentially
+- Parallel data transformation — recalculate/revalue independent record sets
+- Parallel report data preparation — each session builds a section
+- Parallel validation — validate different subsets of a large import
+
+**Doesn't fit:**
+- Anything where chunks depend on each other's results
+- Anything requiring transactional consistency across chunks
+- Short-duration work where session startup cost dominates
+
+---
+
+## The Core Design Problem to Solve
+
+Your current code has two AL-imposed constraints that a library needs to address honestly:
+
+**Problem 1: The temp record array bug.** You solved it with 8 named variables and a giant `case` statement. A library can't do that — it needs a different result collection mechanism.
+
+**Problem 2: Input passing via BLOB on a record.** Currently tightly coupled to `DET Data Editor Buffer`. A library needs a generic carrier record.
+
+Both problems point to the same solution: **use the database as the result channel, not temp records passed through sessions.**
+
+Each worker writes its results to a coordinator-owned result table, keyed by `BatchId + ChunkIndex`. The coordinator reads after all sessions complete. This completely eliminates the temp record array problem and works for any result shape.
+
+---
+
+## Interface Design
+
+### The Worker Interface
+
+```al
+interface "IParallelWorker"
+{
+    /// <summary>
+    /// Called in the background session for this chunk.
+    /// Read input via Chunk, write results back via Chunk.SetResult().
+    /// </summary>
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context");
+}
+```
+
+### The Chunk Context
+
+This is the equivalent of your `TaskContext` but scoped specifically to the batch pattern — no cancellation theater, no futures, just what you actually need:
+
+```al
+codeunit "Parallel Chunk Context"
+{
+    // Input
+    procedure GetChunkIndex(): Integer;
+    procedure GetInput(): JsonObject;           // the payload for this chunk
+    procedure GetIntInput(Key: Text): Integer;  // convenience wrappers
+    procedure GetTextInput(Key: Text): Text;
+
+    // Output — writes to result table, not temp record
+    procedure SetResult(Result: JsonObject);
+    procedure AppendResult(Result: JsonObject); // for multi-row results
+
+    // Basic progress visible to coordinator
+    procedure ReportProgress(Message: Text);
+}
+```
+
+### The Coordinator
+
+```al
+codeunit "Parallel Batch Coordinator"
+{
+    // Configure
+    procedure SetThreads(Count: Integer): Codeunit "Parallel Batch Coordinator";
+    procedure SetTimeout(Seconds: Integer): Codeunit "Parallel Batch Coordinator";
+    procedure SetPollInterval(Milliseconds: Integer): Codeunit "Parallel Batch Coordinator";
+
+    // Three splitting strategies
+    procedure RunForRecords(
+        Worker: Interface "IParallelWorker";
+        var RecRef: RecordRef;
+        BasePayload: JsonObject): Guid;   // returns BatchId
+
+    procedure RunForList(
+        Worker: Interface "IParallelWorker";
+        Items: List of [Text];
+        BasePayload: JsonObject): Guid;
+
+    procedure RunForChunks(
+        Worker: Interface "IParallelWorker";
+        Chunks: List of [JsonObject]): Guid;   // developer defines splits entirely
+
+    // Collect results after completion
+    procedure WaitForCompletion(BatchId: Guid): Boolean;
+    procedure GetResults(BatchId: Guid): List of [JsonObject];
+    procedure GetErrors(BatchId: Guid): List of [Text];
+    procedure Cleanup(BatchId: Guid);
+}
+```
+
+---
+
+## The Three Splitting Strategies
+
+### `RunForRecords` — Your Current Case
+
+Automatically partitions a `RecordRef` by count, assigns `StartIndex`/`EndIndex` per chunk. Worker receives them in input and uses `Record.Next(StartIndex)`.
+
+### `RunForList` — New Scenario: Parallel API Calls
+
+```al
+// Example: call 50 vendor APIs in parallel, 6 at a time
+Items.Add('https://api.vendor1.com/stock');
+Items.Add('https://api.vendor2.com/stock');
+// ... 48 more
+
+Coordinator
+    .SetThreads(6)
+    .SetTimeout(30)
+    .RunForList(Codeunit::"Fetch Vendor Stock Worker", Items, EmptyPayload);
+```
+
+The coordinator splits the 50 URLs into 6 chunks automatically. Each worker session handles roughly 8-9 URLs sequentially within its chunk.
+
+### `RunForChunks` — Custom Splits
+
+When the developer knows exactly how to divide work and the chunks aren't uniform:
+
+```al
+// Example: parallel recalculation, chunks by posting group
+// (some groups are much larger than others — equal count split would be unbalanced)
+foreach PostingGroup in PostingGroups do begin
+    Chunk := BuildChunkPayload(PostingGroup);
+    Chunks.Add(Chunk);
+end;
+
+Coordinator
+    .SetThreads(8)
+    .RunForChunks(Codeunit::"Recalculate Group Worker", Chunks);
+```
+
+---
+
+## The State Tables
+
+Two tables, small and focused:
+
+```al
+table "Parallel Batch"
+{
+    fields
+    {
+        field(1; BatchId; Guid) { }
+        field(2; Status; Enum "Batch Status") { }   // Running/Completed/PartialFailure/Failed
+        field(3; TotalChunks; Integer) { }
+        field(4; CompletedChunks; Integer) { }
+        field(5; FailedChunks; Integer) { }
+        field(6; CreatedAt; DateTime) { }
+        field(7; CompletedAt; DateTime) { }
+        field(8; WorkerCodeunitId; Integer) { }
+    }
+}
+
+table "Parallel Batch Chunk"
+{
+    fields
+    {
+        field(1; BatchId; Guid) { }
+        field(2; ChunkIndex; Integer) { }
+        field(3; Status; Enum "Chunk Status") { }   // Pending/Running/Completed/Failed
+        field(4; InputPayload; Blob) { }
+        field(5; ResultPayload; Blob) { }
+        field(6; ErrorMessage; Text[2048]) { }
+        field(7; SessionId; Integer) { }
+        field(8; StartedAt; DateTime) { }
+        field(9; CompletedAt; DateTime) { }
+    }
+}
+```
+
+No result merging problem — coordinator simply reads all `Parallel Batch Chunk` records for the BatchId where Status = Completed and assembles `GetResults()`.
+
+---
+
+## What a Worker Actually Looks Like
+
+### Record Reading Worker (your current scenario, reimplemented)
+
+```al
+codeunit "DET Read Data Batch" implements "IParallelWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context")
+    var
+        RecRef: RecordRef;
+        Input: JsonObject;
+        Result: JsonObject;
+        // ... field reading logic same as today
+    begin
+        Input := Chunk.GetInput();
+        StartIndex := Chunk.GetIntInput('StartIndex');
+        EndIndex := Chunk.GetIntInput('EndIndex');
+        TableNo := Chunk.GetIntInput('TableNo');
+
+        RecRef.Open(TableNo);
+        RecRef.Next(StartIndex);
+
+        repeat
+            // build row result
+            Chunk.AppendResult(BuildRowJson(RecRef));
+            StartIndex += 1;
+        until (RecRef.Next() = 0) or (StartIndex > EndIndex);
+    end;
+}
+```
+
+### Vendor API Worker (new scenario)
+
+```al
+codeunit "Fetch Vendor Stock Worker" implements "IParallelWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context")
+    var
+        Input: JsonObject;
+        Urls: JsonArray;
+        Url: JsonToken;
+        Result: JsonObject;
+        HttpClient: HttpClient;
+        Response: HttpResponseMessage;
+        ResponseBody: Text;
+    begin
+        Input := Chunk.GetInput();
+        Input.Get('urls', Urls);  // coordinator put this chunk's URLs here
+
+        foreach Url in Urls do begin
+            HttpClient.Get(Url.AsValue().AsText(), Response);
+            Response.Content().ReadAs(ResponseBody);
+
+            Result.Add('url', Url.AsValue().AsText());
+            Result.Add('response', ResponseBody);
+            Chunk.AppendResult(Result);
+            Clear(Result);
+        end;
+    end;
+}
+```
+
+---
+
+## What This Design Deliberately Leaves Out
+
+- No cancellation — document it, don't fake it
+- No `WhenAny` — the coordinator waits for all chunks, period
+- No priorities — session limits are the natural throttle
+- No automatic retry per chunk — that's the caller's responsibility, or Job Queue's
+
+---
+
+## The Honest Ceiling
+
+The `RunForChunks` strategy is the most powerful because it lets developers express any workload — not just record ranges. As long as the work is:
+
+- Chunk-independent (no shared state between chunks)
+- Medium duration (session startup overhead is worth it)
+- Result-serializable to JSON
+
+...this coordinator handles it cleanly. That covers a genuinely useful surface area without pretending AL is something it isn't.
+
+Worth prototyping the two tables and the `Parallel Chunk Context` codeunit first — those are the foundation everything else builds on. Want to go deeper on any specific layer?
+
+Question about urls example, I think your example is not good because we can use Rest Client instead of simply text, in that case we might be able to pass authentication and so on. Maybe we even can read result?
+
+Good catch. The URL-as-text example has a real problem that goes beyond just aesthetics — let me think through why.
+
+---
+
+## The Actual Problem
+
+You can't pass an `HttpClient` instance across sessions. `StartSession` only carries a single record, so everything must be serializable to that record's BLOB. An `HttpClient` with configured authentication, certificates, custom handlers — none of that survives session boundaries.
+
+So the question isn't "pass a RestClient object" — it's **what is the right serializable representation of an HTTP request** that carries everything a background session needs to execute it fully and return a meaningful result.
+
+A URL string is too thin. It loses method, headers, auth, body, timeout. But it pointed at the right scenario — parallel HTTP calls are a genuine use case.
+
+---
+
+## The Right Abstraction: Request Descriptor + Response Result
+
+Instead of passing URLs, the `RunForList` scenario for HTTP should deal in serialized request descriptors:
+
+```al
+codeunit "Parallel Http Request Builder"
+{
+    procedure AddRequest(
+        Url: Text;
+        Method: Enum "Http Method"): Codeunit "Parallel Http Request Builder";
+
+    procedure WithHeader(Key: Text; Value: Text): Codeunit "Parallel Http Request Builder";
+    procedure WithBearerToken(Token: Text): Codeunit "Parallel Http Request Builder";
+    procedure WithBasicAuth(Username: Text; Password: Text): Codeunit "Parallel Http Request Builder";
+    procedure WithBody(Body: Text; ContentType: Text): Codeunit "Parallel Http Request Builder";
+    procedure WithTimeout(Seconds: Integer): Codeunit "Parallel Http Request Builder";
+
+    procedure Build(): JsonObject;  // serializes to chunk payload
+}
+```
+
+Each request becomes a `JsonObject` like:
+
+```json
+{
+    "url": "https://api.vendor.com/stock",
+    "method": "GET",
+    "headers": {
+        "Authorization": "Bearer eyJ...",
+        "Accept": "application/json"
+    },
+    "body": "",
+    "contentType": "",
+    "timeoutSeconds": 30
+}
+```
+
+The coordinator gets a `List of [JsonObject]` — one per request — and passes them to `RunForChunks` naturally.
+
+---
+
+## A Dedicated HTTP Worker
+
+Rather than a generic worker that happens to do HTTP, ship a built-in one:
+
+```al
+codeunit "Parallel Http Worker" implements "IParallelWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context")
+    var
+        Requests: JsonArray;
+        RequestToken: JsonToken;
+        Request: JsonObject;
+        Client: HttpClient;
+        RequestMessage: HttpRequestMessage;
+        ResponseMessage: HttpResponseMessage;
+        ResponseBody: Text;
+        Result: JsonObject;
+        Url, Method : Text;
+        Headers: JsonObject;
+        HeaderToken: JsonToken;
+        HeaderKey: Text;
+        RequestHeaders: HttpHeaders;
+    begin
+        Requests := Chunk.GetInputArray('requests');  // chunk holds N requests
+
+        foreach RequestToken in Requests do begin
+            Request := RequestToken.AsObject();
+
+            Url := GetText(Request, 'url');
+            Method := GetText(Request, 'method');
+
+            RequestMessage.Method(Method);
+            RequestMessage.SetRequestUri(Url);
+
+            // Reconstruct headers from payload
+            Request.Get('headers', HeaderToken);
+            Headers := HeaderToken.AsObject();
+            RequestMessage.GetHeaders(RequestHeaders);
+            foreach HeaderKey in Headers.Keys() do begin
+                Headers.Get(HeaderKey, HeaderToken);
+                RequestHeaders.Add(HeaderKey, HeaderToken.AsValue().AsText());
+            end;
+
+            // Set body if present
+            if GetText(Request, 'body') <> '' then
+                SetRequestBody(RequestMessage, Request);
+
+            Clear(Result);
+            if Client.Send(RequestMessage, ResponseMessage) then begin
+                ResponseMessage.Content().ReadAs(ResponseBody);
+                Result.Add('url', Url);
+                Result.Add('success', true);
+                Result.Add('statusCode', ResponseMessage.HttpStatusCode());
+                Result.Add('body', ResponseBody);
+                Result.Add('reasonPhrase', ResponseMessage.ReasonPhrase());
+            end else begin
+                Result.Add('url', Url);
+                Result.Add('success', false);
+                Result.Add('statusCode', 0);
+                Result.Add('body', '');
+                Result.Add('errorMessage', GetLastErrorText());
+            end;
+
+            Chunk.AppendResult(Result);
+        end;
+    end;
+}
+```
+
+---
+
+## Reading Results — Properly Typed
+
+The caller gets back structured responses, not raw text:
+
+```al
+codeunit "Parallel Http Response"
+{
+    procedure FromJson(Result: JsonObject): Codeunit "Parallel Http Response";
+
+    procedure GetUrl(): Text;
+    procedure IsSuccess(): Boolean;
+    procedure GetStatusCode(): Integer;
+    procedure GetBody(): Text;
+    procedure GetBodyAsJson(): JsonObject;   // convenience — parses body if JSON
+    procedure GetHeader(Key: Text): Text;
+    procedure GetErrorMessage(): Text;
+}
+```
+
+So the calling code becomes:
+
+```al
+// Build requests
+Builder
+    .AddRequest('https://api.vendor1.com/stock', Enum::"Http Method"::GET)
+    .WithBearerToken(AccessToken)
+    .WithTimeout(15);
+
+Builder
+    .AddRequest('https://api.vendor2.com/stock', Enum::"Http Method"::GET)
+    .WithBearerToken(AccessToken)
+    .WithTimeout(15);
+
+// Run in parallel
+BatchId := Coordinator
+    .SetThreads(6)
+    .RunForChunks(Codeunit::"Parallel Http Worker", Builder.BuildChunks(6));
+
+// Wait and read
+if Coordinator.WaitForCompletion(BatchId) then
+    foreach ResultJson in Coordinator.GetResults(BatchId) do begin
+        Response.FromJson(ResultJson);
+        if Response.IsSuccess() then
+            ProcessStockData(Response.GetUrl(), Response.GetBodyAsJson())
+        else
+            LogFailure(Response.GetUrl(), Response.GetStatusCode(), Response.GetErrorMessage());
+    end;
+```
+
+---
+
+## What This Reveals About the Library's Shape
+
+The HTTP scenario actually shows that the library has two distinct layers:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  BUILT-IN WORKERS                                           │
+│  "Parallel Http Worker"  /  future: "Parallel AL Report"   │
+│  — ready to use, no IParallelWorker impl needed             │
+├─────────────────────────────────────────────────────────────┤
+│  COORDINATOR + INTERFACES                                   │
+│  "Parallel Batch Coordinator"  /  "IParallelWorker"         │
+│  — foundation for custom workers                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The built-in HTTP worker is actually the most immediately useful thing the library could ship with — because parallel external API calls is a pain point almost every BC partner hits, and the current answer is always hand-rolled `StartSession` code with no error structure.
+
+The one remaining honest constraint: **authentication tokens still go through the BLOB payload**. If a token is short-lived and expires between when the coordinator serializes it and when the background session uses it, the request fails. That needs to be documented clearly — this pattern works well for tokens with reasonable lifetime, not for flows where auth itself needs to happen inside the session.
+
+Builder? Business central already have Rest Client codeunit
+
+You're right, that's a redundant abstraction. BC's `Rest Client` already handles authentication, headers, content type, response parsing — building a custom builder on top of it is just reinventing what's already there.
+
+The problem it exposes though is still real: **you can't pass a configured `Rest Client` instance across sessions**. It's not serializable. So the question becomes how to work with it honestly.
+
+---
+
+## The Actual Constraint
+
+What you *can* serialize to the chunk payload is the **data needed to configure a fresh `Rest Client` inside the background session**. Not the instance itself — the configuration.
+
+So instead of a builder, the worker interface gets a setup hook:
+
+```al
+interface "IParallelWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context");
+
+    /// <summary>
+    /// Called inside the background session before Execute().
+    /// Configure authentication, base URL, default headers here.
+    /// Input from Chunk is already available.
+    /// </summary>
+    procedure ConfigureClient(
+        var RestClient: Codeunit "Rest Client"; 
+        var Chunk: Codeunit "Parallel Chunk Context");
+}
+```
+
+The coordinator's dispatcher calls `ConfigureClient` first, then `Execute`. The developer reads whatever auth config they stored in the chunk payload and applies it to a fresh `Rest Client` that's already alive in the correct session context.
+
+---
+
+## What a Worker Looks Like Now
+
+```al
+codeunit "Fetch Vendor Stock Worker" implements "IParallelWorker"
+{
+    var
+        Client: Codeunit "Rest Client";
+
+    procedure ConfigureClient(
+        var RestClient: Codeunit "Rest Client";
+        var Chunk: Codeunit "Parallel Chunk Context")
+    begin
+        // Auth config came from caller via chunk payload
+        RestClient.SetBaseAddress(Chunk.GetTextInput('BaseUrl'));
+        RestClient.SetDefaultRequestHeader(
+            'Authorization', 
+            'Bearer ' + Chunk.GetTextInput('AccessToken'));
+
+        Client := RestClient;  // keep reference for Execute
+    end;
+
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context")
+    var
+        Urls: JsonArray;
+        UrlToken: JsonToken;
+        Response: Codeunit "Rest Client Response";
+        Result: JsonObject;
+    begin
+        Urls := Chunk.GetInputArray('urls');
+
+        foreach UrlToken in Urls do begin
+            Response := Client.Get(UrlToken.AsValue().AsText());
+
+            Result.Add('url', UrlToken.AsValue().AsText());
+            Result.Add('success', Response.IsSuccessStatusCode());
+            Result.Add('statusCode', Response.GetHttpStatusCode());
+            Result.Add('body', Response.GetContentAsText());
+
+            Chunk.AppendResult(Result);
+            Clear(Result);
+        end;
+    end;
+}
+```
+
+Much cleaner — and the caller uses BC's actual `Rest Client` mental model, not a custom one.
+
+---
+
+## The Short-Lived Token Problem Remains
+
+This doesn't change the fundamental constraint — the token still gets serialized into the chunk payload at dispatch time. If it expires before the background session starts, the call fails. That's worth documenting explicitly as a known limitation of the pattern, not something the library tries to solve.
+
+Let’s think about parallel calculations example, how it will looks like?
+
+Good scenario to think through because it's fundamentally different from both record reading and HTTP calls — the challenge isn't I/O latency, it's **CPU-bound work spread across a large dataset**.
+
+---
+
+## What Makes Calculations Different
+
+With record reading, the worker reads data and returns it raw — the caller decides what to do with results.
+
+With calculations, the worker **reads, transforms, and writes back to the database** within its own session. There's nothing to return to the coordinator except a status — the result is already committed in the database.
+
+This changes the collect phase significantly. The coordinator doesn't need to gather and merge results — it just needs to know **all chunks finished and whether any failed**.
+
+---
+
+## Concrete Example: Item Cost Recalculation
+
+A realistic scenario — you need to recalculate unit costs for all items based on purchase history. 50,000 items, sequential takes 40 minutes.
+
+### What the Worker Does
+
+```al
+codeunit "Recalculate Item Cost Worker" implements "IParallelWorker"
+{
+    procedure ConfigureClient(var RestClient: Codeunit "Rest Client"; var Chunk: Codeunit "Parallel Chunk Context")
+    begin
+        // No HTTP needed here
+    end;
+
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context")
+    var
+        Item: Record Item;
+        ItemCostMgt: Codeunit "Item Cost Management";
+        RecRef: RecordRef;
+        StartIndex, EndIndex : Integer;
+        FilterView: Text;
+    begin
+        StartIndex := Chunk.GetIntInput('StartIndex');
+        EndIndex := Chunk.GetIntInput('EndIndex');
+        FilterView := Chunk.GetTextInput('FilterView');
+
+        RecRef.Open(Database::Item);
+        if FilterView <> '' then
+            RecRef.SetView(FilterView);
+
+        RecRef.Next(StartIndex);
+
+        Item.SetView(RecRef.GetView());
+        if Item.FindFirst() then
+            repeat
+                // Actual calculation — writes directly to DB
+                ItemCostMgt.UpdateUnitCost(Item, '', 0, 0, false, false, false, 0);
+
+                StartIndex += 1;
+            until (Item.Next() = 0) or (StartIndex > EndIndex);
+    end;
+}
+```
+
+The worker commits its own changes — no result needs to come back. Each chunk owns a slice of items with no overlap, so there's no conflict between sessions.
+
+### The Caller
+
+```al
+trigger OnAction()
+var
+    Item: Record Item;
+    Coordinator: Codeunit "Parallel Batch Coordinator";
+    BatchId: Guid;
+    Errors: List of [Text];
+    ErrorText: Text;
+begin
+    // Apply whatever filters the user set
+    Item.CopyFilters(Rec);
+
+    BatchId := Coordinator
+        .SetThreads(6)
+        .SetTimeout(3600)  // long-running — 1 hour timeout
+        .RunForRecords(
+            Codeunit::"Recalculate Item Cost Worker",
+            Item,
+            new JsonObject());  // no extra payload needed
+
+    if Coordinator.WaitForCompletion(BatchId) then
+        Message('Recalculation completed successfully.')
+    else begin
+        Errors := Coordinator.GetErrors(BatchId);
+        foreach ErrorText in Errors do
+            // Log or show which chunks failed
+    end;
+
+    Coordinator.Cleanup(BatchId);
+end;
+```
+
+---
+
+## But Wait — This Reveals a Design Gap
+
+The `WaitForCompletion` call is blocking the calling session the entire time. For a 40-item test dataset that's fine. For 50,000 items taking 7 minutes — you're back to the same problem the library is trying to solve.
+
+So calculations expose a pattern the HTTP and record reading scenarios didn't: **fire, release, check later**.
+
+This means the coordinator needs a non-blocking path:
+
+```al
+// Option A — blocking, fine for short work
+if Coordinator.WaitForCompletion(BatchId) then ...
+
+// Option B — non-blocking, caller stores BatchId and checks later
+BatchId := Coordinator
+    .SetThreads(6)
+    .RunForRecords(Codeunit::"Recalculate Item Cost Worker", Item, EmptyPayload);
+
+// Store BatchId somewhere meaningful
+SetupRec."Last Recalc Batch Id" := BatchId;
+SetupRec.Modify();
+
+// Later — from a page action, factbox refresh, or notification
+case Coordinator.GetStatus(BatchId) of
+    Enum::"Batch Status"::Running:
+        Message('Still running: %1/%2 chunks done',
+            Coordinator.GetCompletedChunks(BatchId),
+            Coordinator.GetTotalChunks(BatchId));
+    Enum::"Batch Status"::Completed:
+        Message('Done.');
+    Enum::"Batch Status"::PartialFailure:
+        // Handle partial results
+end;
+```
+
+---
+
+## Another Calculation Variant: Aggregation
+
+Not all calculations write back to the source table. Sometimes you're computing a summary — total inventory value by location, sales statistics by period, margin analysis across a product range. Here the worker *does* return data, just not raw records — it returns computed values.
+
+```al
+codeunit "Inventory Value By Location Worker" implements "IParallelWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context")
+    var
+        ItemLedgerEntry: Record "Item Ledger Entry";
+        LocationCode: Text;
+        TotalValue: Decimal;
+        Result: JsonObject;
+    begin
+        LocationCode := Chunk.GetTextInput('LocationCode');
+
+        ItemLedgerEntry.SetRange("Location Code", LocationCode);
+        ItemLedgerEntry.CalcSums("Cost Amount (Actual)");
+
+        TotalValue := ItemLedgerEntry."Cost Amount (Actual)";
+
+        Result.Add('locationCode', LocationCode);
+        Result.Add('totalValue', TotalValue);
+        Chunk.SetResult(Result);  // single result per chunk, not AppendResult
+    end;
+}
+```
+
+Here `RunForChunks` fits naturally — each chunk is one location, not a record range:
+
+```al
+Location.FindSet();
+repeat
+    Chunk := new JsonObject();
+    Chunk.Add('LocationCode', Location.Code);
+    Chunks.Add(Chunk);
+until Location.Next() = 0;
+
+BatchId := Coordinator
+    .SetThreads(6)
+    .RunForChunks(Codeunit::"Inventory Value By Location Worker", Chunks);
+
+if Coordinator.WaitForCompletion(BatchId) then
+    foreach ResultJson in Coordinator.GetResults(BatchId) do begin
+        ResultJson.Get('locationCode', Token);
+        LocationCode := Token.AsValue().AsText();
+        ResultJson.Get('totalValue', Token);
+        TotalValue := Token.AsValue().AsDecimal();
+        // build summary...
+    end;
+```
+
+---
+
+## What This Reveals About the Design
+
+Three distinct calculation patterns emerge, each using a different coordinator method and result shape:
+
+| Pattern | Example | Splitting | Result |
+|---|---|---|---|
+| Batch update | Item cost recalc | `RunForRecords` | Nothing returned — DB writes |
+| Aggregation | Inventory value | `RunForChunks` | One value per chunk |
+| Transformation | Data import/reformat | `RunForRecords` | Rows returned via `AppendResult` |
+
+The interface handles all three cleanly because `SetResult` / `AppendResult` / writing nothing are all valid choices inside `Execute`. The coordinator doesn't care which one the worker picked — it just waits for all sessions to finish and makes whatever is in the result table available.
+
+The non-blocking path is probably more important for calculations than any other scenario. Worth making it a first-class design choice rather than an afterthought.
+
+
+Is there any value for our interface can bring this keyword or variant variable or RecordRef /FieldRef variable?
+
+Good question to ask at this point — because each of these has a genuinely different answer depending on which layer of the library you're looking at.
+
+---
+
+## `this` Keyword
+
+This one has clear, immediate value — specifically for the coordinator's fluent API. Currently the fluent methods have an awkward return type:
+
+```al
+procedure SetThreads(Count: Integer): Codeunit "Parallel Batch Coordinator";
+procedure SetTimeout(Seconds: Integer): Codeunit "Parallel Batch Coordinator";
+```
+
+This works but it's not true fluent — each method returns a new codeunit reference, which means the compiler has to resolve the type at each chaining step. With `this`:
+
+```al
+procedure SetThreads(Count: Integer): Codeunit "Parallel Batch Coordinator"
+begin
+    ThreadCount := Count;
+    exit(this);
+end;
+
+procedure SetTimeout(Seconds: Integer): Codeunit "Parallel Batch Coordinator"
+begin
+    TimeoutSeconds := Seconds;
+    exit(this);
+end;
+```
+
+Same codeunit instance flows through the chain, state accumulates naturally, no ambiguity. This is exactly the use case `this` was designed for. Genuine value, low risk.
+
+---
+
+## Variant
+
+This is more nuanced — Variant's value depends entirely on which side of the session boundary you're on.
+
+**Where it helps — chunk input for scalar values:**
+
+Currently the chunk payload is always a `JsonObject`, which means even simple scalar inputs get JSON-wrapped:
+
+```al
+// Current — everything through JsonObject
+Chunk.GetIntInput('StartIndex')
+Chunk.GetTextInput('LocationCode')
+```
+
+A Variant-based input could carry typed scalars without serialization overhead for the foreground execution path:
+
+```al
+codeunit "Parallel Chunk Context"
+{
+    procedure GetInput(): Variant;           // typed, no JSON parsing
+    procedure GetInputAsJson(): JsonObject;  // fallback for complex structures
+}
+```
+
+**Where it breaks completely — across session boundaries:**
+
+A Variant can hold a Record. That Record does not survive `StartSession`. So if a developer passes a Record via Variant expecting it to arrive in the background session intact, it silently fails or errors. This is a trap that's worse than JsonObject because it looks like it should work.
+
+The honest design decision: Variant works as an input type **only for the foreground execution path** — when `NumberOfThreads = 1` and the coordinator runs inline. For background sessions, JsonObject is the only safe serializable container. The interface needs to make that boundary explicit, not hide it.
+
+---
+
+## RecordRef / FieldRef
+
+This is where the most genuine value is — but in different layers than you might expect.
+
+**In the splitting layer — RecordRef is already essential:**
+
+`RunForRecords` takes a RecordRef today. The coordinator uses it to count records, extract the current filter view, and calculate `StartIndex`/`EndIndex` per chunk. RecordRef is the right tool here precisely because the coordinator doesn't know or care which table it's splitting. This is already in the design.
+
+**In the worker — FieldRef enables truly generic workers:**
+
+This is the interesting insight. Your Data Editor worker is generic — it doesn't know at compile time which table or which fields it's reading. It uses RecordRef and FieldRef to operate on any table dynamically. That's actually a distinct worker archetype worth making explicit in the interface:
+
+```al
+interface "IParallelWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context");
+}
+
+interface "IParallelRecordWorker"
+{
+    /// <summary>
+    /// For workers that operate generically on any table.
+    /// RecordRef is already positioned at StartIndex, filtered and ready.
+    /// Worker iterates from here to EndIndex.
+    /// </summary>
+    procedure Execute(
+        var Chunk: Codeunit "Parallel Chunk Context";
+        var RecRef: RecordRef);
+}
+```
+
+The coordinator detects which interface the worker implements and calls accordingly. For `IParallelRecordWorker` it reconstructs the RecordRef from chunk input — table number, filter view, starting position — and hands it to the worker already positioned. The worker never touches JsonObject for record navigation at all:
+
+```al
+codeunit "DET Read Data Batch" implements "IParallelRecordWorker"
+{
+    procedure Execute(var Chunk: Codeunit "Parallel Chunk Context"; var RecRef: RecordRef)
+    var
+        FieldRef: FieldRef;
+        Result: JsonObject;
+        EndIndex, FieldNo : Integer;
+    begin
+        EndIndex := Chunk.GetIntInput('EndIndex');
+
+        repeat
+            Clear(Result);
+            foreach FieldNo in LoadFieldNoList do begin
+                FieldRef := RecRef.Field(FieldNo);
+                if FieldRef.Class() = FieldClass::FlowField then
+                    FieldRef.CalcField();
+                Result.Add(FieldRef.Name(), Format(FieldRef.Value()));
+            end;
+            Chunk.AppendResult(Result);
+        until (RecRef.Next() = 0) or (Chunk.GetCurrentIndex() > EndIndex);
+    end;
+}
+```
+
+The worker is completely free of positioning logic — no `StartIndex` handling, no `RecRef.Open()`, no `SetView()`. The coordinator owns all of that.
+
+**FieldRef for result typing:**
+
+There's a secondary value here. Currently results go into JsonObject with `Format(FieldRef.Value())` — everything becomes a string. FieldRef knows the actual field type, so the worker could make smarter serialization decisions:
+
+```al
+local procedure SerializeField(FieldRef: FieldRef; var Result: JsonObject)
+begin
+    case FieldRef.Type() of
+        FieldType::Integer,
+        FieldType::BigInteger:
+            Result.Add(FieldRef.Name(), FieldRef.Value());
+        FieldType::Decimal:
+            Result.Add(FieldRef.Name(), FieldRef.Value());
+        FieldType::Boolean:
+            Result.Add(FieldRef.Name(), FieldRef.Value());
+        else
+            Result.Add(FieldRef.Name(), Format(FieldRef.Value()));
+    end;
+end;
+```
+
+Numeric types stay numeric in JSON rather than becoming strings, which matters when the caller wants to aggregate or compare results without re-parsing.
+
+---
+
+## Summary
+
+| Feature | Value | Where | Risk |
+|---|---|---|---|
+| `this` | High | Coordinator fluent API | None |
+| Variant | Low-Medium | Foreground scalar inputs only | Trap for Record across sessions |
+| RecordRef | High | Splitting layer + `IParallelRecordWorker` | None |
+| FieldRef | Medium | Generic workers + result type fidelity | None |
+
+The two interfaces — `IParallelWorker` for custom logic, `IParallelRecordWorker` for generic table operations — is probably the most meaningful design conclusion here. It cleanly separates the two fundamentally different worker archetypes the library needs to support.
+
+So let’s implement design for everything except of variant variables
+
