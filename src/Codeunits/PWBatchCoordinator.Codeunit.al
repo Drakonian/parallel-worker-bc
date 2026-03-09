@@ -1,5 +1,8 @@
 namespace VolodymyrDvernytskyi.ParallelWorker;
 
+/// <summary>
+/// Orchestrates parallel execution by splitting work into chunks and dispatching them to background sessions.
+/// </summary>
 codeunit 99000 "PW Batch Coordinator"
 {
     Access = Public;
@@ -10,24 +13,47 @@ codeunit 99000 "PW Batch Coordinator"
         PollIntervalMs: Integer;
         WriteTransactionErr: Label 'Cannot start a parallel batch while a write transaction is active. Commit or rollback your changes before calling RunFor* methods, otherwise they would be silently committed.';
 
+    /// <summary>
+    /// Sets the number of parallel threads (background sessions) to use.
+    /// </summary>
+    /// <param name="Count">The number of threads. Defaults to 4 if not set.</param>
+    /// <returns>The current instance for fluent chaining.</returns>
     procedure SetThreads(Count: Integer): Codeunit "PW Batch Coordinator"
     begin
         ThreadCount := Count;
         exit(this);
     end;
 
+    /// <summary>
+    /// Sets the maximum time to wait for batch completion in WaitForCompletion.
+    /// </summary>
+    /// <param name="Seconds">The timeout in seconds. Zero or unset means no timeout.</param>
+    /// <returns>The current instance for fluent chaining.</returns>
     procedure SetTimeout(Seconds: Integer): Codeunit "PW Batch Coordinator"
     begin
         TimeoutSeconds := Seconds;
         exit(this);
     end;
 
+    /// <summary>
+    /// Sets the polling interval used by WaitForCompletion to check batch status.
+    /// </summary>
+    /// <param name="Milliseconds">The interval in milliseconds. Defaults to 500 if not set.</param>
+    /// <returns>The current instance for fluent chaining.</returns>
     procedure SetPollInterval(Milliseconds: Integer): Codeunit "PW Batch Coordinator"
     begin
         PollIntervalMs := Milliseconds;
         exit(this);
     end;
 
+    /// <summary>
+    /// Splits a filtered record set into chunks and executes the worker in parallel background sessions.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
+    /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
+    /// <returns>The batch ID that can be used to track progress and retrieve results.</returns>
+    /// <remarks>Commits the current transaction before starting background sessions. Must not be called inside a write transaction.</remarks>
     procedure RunForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; BasePayload: JsonObject): Guid
     var
         BatchId: Guid;
@@ -87,6 +113,14 @@ codeunit 99000 "PW Batch Coordinator"
         exit(BatchId);
     end;
 
+    /// <summary>
+    /// Splits a list of text values into chunks and executes the worker in parallel background sessions.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="Items">The list of text items to distribute across chunks.</param>
+    /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
+    /// <returns>The batch ID that can be used to track progress and retrieve results.</returns>
+    /// <remarks>Commits the current transaction before starting background sessions. Must not be called inside a write transaction.</remarks>
     procedure RunForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; BasePayload: JsonObject): Guid
     var
         BatchId: Guid;
@@ -142,6 +176,13 @@ codeunit 99000 "PW Batch Coordinator"
         exit(BatchId);
     end;
 
+    /// <summary>
+    /// Runs the worker in parallel for a list of pre-built chunk payloads, one background session per chunk.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="Chunks">A list of JSON objects, each representing the full input for one chunk.</param>
+    /// <returns>The batch ID that can be used to track progress and retrieve results.</returns>
+    /// <remarks>Commits the current transaction before starting background sessions. Must not be called inside a write transaction.</remarks>
     procedure RunForChunks(WorkerType: Enum "PW Worker Type"; Chunks: List of [JsonObject]): Guid
     var
         BatchId: Guid;
@@ -164,6 +205,11 @@ codeunit 99000 "PW Batch Coordinator"
         exit(BatchId);
     end;
 
+    /// <summary>
+    /// Blocks the current session until the batch finishes or the timeout elapses.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier returned by a RunFor* method.</param>
+    /// <returns>True if the batch completed successfully; false on failure, partial failure, or timeout.</returns>
     procedure WaitForCompletion(BatchId: Guid): Boolean
     var
         Batch: Record "PW Batch";
@@ -197,6 +243,11 @@ codeunit 99000 "PW Batch Coordinator"
         until false;
     end;
 
+    /// <summary>
+    /// Returns the current status of a batch.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <returns>The batch status enum value.</returns>
     procedure GetStatus(BatchId: Guid): Enum "PW Batch Status"
     var
         Batch: Record "PW Batch";
@@ -206,6 +257,11 @@ codeunit 99000 "PW Batch Coordinator"
         exit(Batch.Status);
     end;
 
+    /// <summary>
+    /// Returns the number of chunks that have completed successfully so far.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <returns>The count of completed chunks.</returns>
     procedure GetCompletedChunks(BatchId: Guid): Integer
     var
         Batch: Record "PW Batch";
@@ -215,6 +271,11 @@ codeunit 99000 "PW Batch Coordinator"
         exit(Batch."Completed Chunks");
     end;
 
+    /// <summary>
+    /// Returns the total number of chunks in the batch.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <returns>The total chunk count.</returns>
     procedure GetTotalChunks(BatchId: Guid): Integer
     var
         Batch: Record "PW Batch";
@@ -224,6 +285,11 @@ codeunit 99000 "PW Batch Coordinator"
         exit(Batch."Total Chunks");
     end;
 
+    /// <summary>
+    /// Checks whether the batch has reached a terminal state (Completed, Failed, or PartialFailure).
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <returns>True if the batch is no longer running.</returns>
     procedure IsFinished(BatchId: Guid): Boolean
     var
         Batch: Record "PW Batch";
@@ -234,6 +300,11 @@ codeunit 99000 "PW Batch Coordinator"
         exit(Batch.Status in ["PW Batch Status"::Completed, "PW Batch Status"::Failed, "PW Batch Status"::PartialFailure]);
     end;
 
+    /// <summary>
+    /// Collects all result JSON objects from successfully completed chunks.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <param name="Results">The list that will be populated with result objects from all completed chunks.</param>
     procedure GetResults(BatchId: Guid; var Results: List of [JsonObject])
     var
         Chunk: Record "PW Batch Chunk";
@@ -257,6 +328,11 @@ codeunit 99000 "PW Batch Coordinator"
             until Chunk.Next() = 0;
     end;
 
+    /// <summary>
+    /// Collects error messages from all failed chunks in the batch.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <param name="Errors">The list that will be populated with error messages from failed chunks.</param>
     procedure GetErrors(BatchId: Guid; var Errors: List of [Text])
     var
         Chunk: Record "PW Batch Chunk";
@@ -271,6 +347,11 @@ codeunit 99000 "PW Batch Coordinator"
             until Chunk.Next() = 0;
     end;
 
+    /// <summary>
+    /// Collects the original input payloads from all failed chunks, useful for retry scenarios.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
+    /// <param name="FailedInputs">The list that will be populated with input JSON objects from failed chunks.</param>
     procedure GetFailedChunkInputs(BatchId: Guid; var FailedInputs: List of [JsonObject])
     var
         Chunk: Record "PW Batch Chunk";
@@ -292,6 +373,10 @@ codeunit 99000 "PW Batch Coordinator"
             until Chunk.Next() = 0;
     end;
 
+    /// <summary>
+    /// Deletes all batch and chunk records for the specified batch.
+    /// </summary>
+    /// <param name="BatchId">The batch identifier.</param>
     procedure Cleanup(BatchId: Guid)
     var
         Batch: Record "PW Batch";
