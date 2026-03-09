@@ -105,37 +105,31 @@ end;
 
 ```mermaid
 graph TB
-    Consumer["Your Code<br/>(Consumer)"]
-    Coordinator["PW Batch Coordinator<br/>(Public API)"]
-    DB_Batch["PW Batch<br/>(Table)"]
-    DB_Chunk["PW Batch Chunk<br/>(Table)"]
-    Dispatcher1["PW Task Dispatcher<br/>(Session 1)"]
-    Dispatcher2["PW Task Dispatcher<br/>(Session 2)"]
-    Dispatcher3["PW Task Dispatcher<br/>(Session 3)"]
-    Dispatcher4["PW Task Dispatcher<br/>(Session 4)"]
-    Worker1["Your Worker<br/>(Execute)"]
-    Worker2["Your Worker<br/>(Execute)"]
-    Worker3["Your Worker<br/>(Execute)"]
-    Worker4["Your Worker<br/>(Execute)"]
+    subgraph Consumer
+        Code["Your Code"]
+    end
 
-    Consumer --> Coordinator
-    Coordinator -->|"Creates"| DB_Batch
-    Coordinator -->|"Creates"| DB_Chunk
-    Coordinator -->|"StartSession ×N"| Dispatcher1 & Dispatcher2 & Dispatcher3 & Dispatcher4
-    Dispatcher1 -->|"Reads chunk"| DB_Chunk
-    Dispatcher2 -->|"Reads chunk"| DB_Chunk
-    Dispatcher3 -->|"Reads chunk"| DB_Chunk
-    Dispatcher4 -->|"Reads chunk"| DB_Chunk
-    Dispatcher1 --> Worker1
-    Dispatcher2 --> Worker2
-    Dispatcher3 --> Worker3
-    Dispatcher4 --> Worker4
-    Worker1 -->|"Results"| DB_Chunk
-    Worker2 -->|"Results"| DB_Chunk
-    Worker3 -->|"Results"| DB_Chunk
-    Worker4 -->|"Results"| DB_Chunk
-    Coordinator -->|"Polls status"| DB_Batch
-    Coordinator -->|"Reads results"| DB_Chunk
+    subgraph API["Consumer API"]
+        Coordinator["PW Batch Coordinator"]
+    end
+
+    subgraph Engine["Execution Engine (× N background sessions)"]
+        Dispatcher["PW Task Dispatcher"]
+        Context["PW Chunk Context"]
+        Worker["Your Worker (Execute)"]
+        Dispatcher --> Context --> Worker
+    end
+
+    subgraph Store["State Store (Database as IPC)"]
+        Batch["PW Batch"]
+        Chunk["PW Batch Chunk"]
+    end
+
+    Code -->|"Configure & RunFor*"| Coordinator
+    Coordinator -->|"Create records & StartSession ×N"| Store
+    Coordinator -.->|"Poll status / Read results"| Store
+    Dispatcher -->|"Read input / Write results"| Chunk
+    Dispatcher -->|"Update counters"| Batch
 ```
 
 The library has three layers:
