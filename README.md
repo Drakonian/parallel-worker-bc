@@ -200,7 +200,7 @@ var
     Count: Integer;
 begin
     Ctx.GetRecordRef(RecRef);       // Opens table, applies filter, positions at StartIndex
-    ChunkSize := Ctx.GetEndIndex(); // Number of records in this chunk
+    ChunkSize := Ctx.GetChunkSize(); // Number of records in this chunk
 
     repeat
         // Process RecRef...
@@ -346,7 +346,7 @@ Ctx.GetBatchId(): Guid                      // Parent batch ID
 ```al
 Ctx.IsRecordChunk(): Boolean                // Was this created via RunForRecords?
 Ctx.GetRecordRef(var RecRef)                // Opens table, applies filter, positions cursor
-Ctx.GetEndIndex(): Integer                  // Number of records in this chunk
+Ctx.GetChunkSize(): Integer                  // Number of records in this chunk
 ```
 
 ### Writing Output
@@ -373,25 +373,25 @@ The library enforces strict transaction boundaries:
 
 2. **Workers cannot call Commit().** The dispatcher wraps your `Execute` call with `[CommitBehavior(CommitBehavior::Error)]`. If your worker tries to commit, a runtime error is raised and the chunk is marked as Failed.
 
-3. **Every Commit is documented.** The library has exactly 5 `Commit()` calls, each with an inline comment explaining why it exists:
+3. **Every Commit is documented.** Every `Commit()` call has an inline comment explaining why it exists:
    - Coordinator: 1 per `RunFor*` call (persist batch + chunks before `StartSession`)
-   - Dispatcher: 3 per chunk (persist Running status, persist Completed/Failed status, release LockTable after counter update)
+   - Dispatcher: 3 per chunk at runtime (persist Running status, persist Completed/Failed status, release LockTable after counter update)
 
 ### Error Handling
 
 ```mermaid
 flowchart TD
     Start["Dispatcher: OnRun"] --> Claim["Mark chunk as Running<br/>COMMIT"]
-    Claim --> Try["TryExecuteWorker<br/>(TryFunction + CommitBehavior::Error)"]
+    Claim --> Try["Codeunit.Run(Worker Runner)<br/>(CommitBehavior::Error)"]
     Try -->|Success| Save["Save results<br/>Mark Completed<br/>COMMIT"]
-    Try -->|Failure| Capture["Capture error text + call stack<br/>Re-read chunk (TryFunction rolled back)<br/>Mark Failed<br/>COMMIT"]
+    Try -->|Failure| Capture["Capture error text + call stack<br/>Re-read chunk (Codeunit.Run rolled back)<br/>Mark Failed<br/>COMMIT"]
     Save --> Update["UpdateBatchCounters<br/>(LockTable → recount → COMMIT)"]
     Capture --> Update
     Update --> Done["Session ends"]
 ```
 
-- The `[TryFunction]` attribute catches any error from your worker, including runtime errors.
-- On failure, `TryFunction` rolls back all database changes made during `Execute`. The dispatcher re-reads the chunk record and stores the error message (up to 2048 chars) and full call stack (as BLOB).
+- `Codeunit.Run` catches any error from your worker, including runtime errors.
+- On failure, `Codeunit.Run` rolls back all database changes made during `Execute`. The dispatcher re-reads the chunk record and stores the error message (up to 2048 chars) and full call stack (as BLOB).
 - `UpdateBatchCounters` uses `LockTable` to serialize concurrent counter updates. When all chunks are done, it transitions the batch to `Completed`, `Failed`, or `PartialFailure`.
 
 ### Polling
@@ -526,6 +526,7 @@ The library ships with two pages for observing batch execution:
 | Codeunit | 99001 | PW Chunk Context | Public |
 | Codeunit | 99002 | PW Task Dispatcher | Internal |
 | Codeunit | 99003 | PW Batch Cleanup | Public |
+| Codeunit | 99004 | PW Worker Runner | Internal |
 | Page | 99000 | PW Batches | Public |
 | Page | 99001 | PW Batch Chunk List | Public |
 

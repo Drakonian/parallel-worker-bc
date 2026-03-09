@@ -42,7 +42,8 @@ codeunit 99002 "PW Task Dispatcher"
             Commit();
         end else begin
             // Worker failed — Codeunit.Run rolled back all DB changes.
-            // Rec is clean, no need to re-Get.
+            // Re-read to ensure Rec is clean, consistent with the success branch.
+            Rec.Get(Rec."Batch Id", Rec."Chunk Index");
             ErrorText := GetLastErrorText();
             ErrorCallStack := GetLastErrorCallStack();
             Rec."Error Message" := CopyStr(ErrorText, 1, MaxStrLen(Rec."Error Message"));

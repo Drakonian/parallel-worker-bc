@@ -8,7 +8,6 @@ page 99000 "PW Batches"
     SourceTable = "PW Batch";
     UsageCategory = Lists;
     Editable = false;
-    CardPageId = "PW Batches";
 
     layout
     {

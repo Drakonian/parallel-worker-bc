@@ -193,7 +193,7 @@ codeunit 99001 "PW Chunk Context"
     /// Returns the number of records this chunk should process, based on its start and end index range.
     /// </summary>
     /// <returns>The count of records in this chunk's range.</returns>
-    procedure GetEndIndex(): Integer
+    procedure GetChunkSize(): Integer
     begin
         exit(GetIntInput('$EndIndex') - GetIntInput('$StartIndex') + 1);
     end;

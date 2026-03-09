@@ -228,7 +228,6 @@ codeunit 99000 "PW Batch Coordinator"
         StartTime := CurrentDateTime();
 
         repeat
-            Sleep(Interval);
             if not Batch.Get(BatchId) then
                 exit(false);
             case Batch.Status of
@@ -240,6 +239,7 @@ codeunit 99000 "PW Batch Coordinator"
             end;
             if (TimeoutSeconds > 0) and ((CurrentDateTime() - StartTime) > TimeoutSeconds * 1000) then
                 exit(false);
+            Sleep(Interval);
         until false;
     end;
 
@@ -253,7 +253,8 @@ codeunit 99000 "PW Batch Coordinator"
         Batch: Record "PW Batch";
     begin
         Batch.ReadIsolation := IsolationLevel::ReadUncommitted;
-        Batch.Get(BatchId);
+        if not Batch.Get(BatchId) then
+            exit("PW Batch Status"::Failed);
         exit(Batch.Status);
     end;
 
@@ -267,7 +268,8 @@ codeunit 99000 "PW Batch Coordinator"
         Batch: Record "PW Batch";
     begin
         Batch.ReadIsolation := IsolationLevel::ReadUncommitted;
-        Batch.Get(BatchId);
+        if not Batch.Get(BatchId) then
+            exit(0);
         exit(Batch."Completed Chunks");
     end;
 
@@ -281,7 +283,8 @@ codeunit 99000 "PW Batch Coordinator"
         Batch: Record "PW Batch";
     begin
         Batch.ReadIsolation := IsolationLevel::ReadUncommitted;
-        Batch.Get(BatchId);
+        if not Batch.Get(BatchId) then
+            exit(0);
         exit(Batch."Total Chunks");
     end;
 
