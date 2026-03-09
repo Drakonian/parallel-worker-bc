@@ -73,9 +73,14 @@ codeunit 99002 "PW Task Dispatcher"
         CompletedCount: Integer;
         FailedCount: Integer;
     begin
-        Batch.LockTable();
+        // UpdLock on the Batch row serializes concurrent counter updates
+        // without disabling Tri-State Locking for the entire table.
+        Batch.ReadIsolation := IsolationLevel::UpdLock;
         Batch.Get(BatchId);
 
+        // ReadCommitted ensures we see committed chunk statuses only.
+        // Each dispatcher commits its chunk status before calling this procedure.
+        Chunk.ReadIsolation := IsolationLevel::ReadCommitted;
         Chunk.SetRange("Batch Id", BatchId);
         Chunk.SetRange(Status, "PW Chunk Status"::Completed);
         CompletedCount := Chunk.Count();
@@ -97,7 +102,7 @@ codeunit 99002 "PW Task Dispatcher"
         end;
 
         Batch.Modify();
-        // Release the LockTable lock acquired above.
+        // Release the UpdLock acquired above.
         // Without this commit, the lock is held until the session ends,
         // blocking other chunks that are finishing concurrently.
         Commit();

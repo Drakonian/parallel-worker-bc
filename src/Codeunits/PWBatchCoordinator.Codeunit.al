@@ -471,6 +471,10 @@ codeunit 99000 "PW Batch Coordinator"
                 Batch."Completed At" := CurrentDateTime();
             end;
             Batch.Modify();
+            // Must commit failed-to-start chunk statuses and updated batch counters.
+            // Without this, exclusive locks on the Batch row block background sessions
+            // that call UpdateBatchCounters with UpdLock.
+            Commit();
         end;
     end;
 }
