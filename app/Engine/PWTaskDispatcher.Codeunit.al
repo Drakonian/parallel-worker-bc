@@ -95,10 +95,11 @@ codeunit 99002 "PW Task Dispatcher"
             Batch."Completed At" := CurrentDateTime();
             if FailedCount = 0 then
                 Batch.Status := "PW Batch Status"::Completed
-            else if CompletedCount = 0 then
-                Batch.Status := "PW Batch Status"::Failed
             else
-                Batch.Status := "PW Batch Status"::PartialFailure;
+                if CompletedCount = 0 then
+                    Batch.Status := "PW Batch Status"::Failed
+                else
+                    Batch.Status := "PW Batch Status"::PartialFailure;
         end;
 
         Batch.Modify();
