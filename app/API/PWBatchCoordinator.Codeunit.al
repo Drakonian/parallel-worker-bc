@@ -448,6 +448,8 @@ codeunit 99000 "PW Batch Coordinator"
         Chunk: Record "PW Batch Chunk";
         SessionId: Integer;
         FailedToStart: Integer;
+        CompletedCount: Integer;
+        FailedCount: Integer;
     begin
         Batch.Get(BatchId);
 
@@ -464,16 +466,42 @@ codeunit 99000 "PW Batch Coordinator"
             until Chunk.Next() = 0;
 
         if FailedToStart > 0 then begin
+            // Commit failed-to-start chunk statuses first, so background sessions
+            // that are already running can see them in UpdateBatchCounters.
+            // This also releases all locks from the FindSet loop, preventing
+            // deadlocks when we take UpdLock below.
+            Commit();
+
+            // Use the same serialization pattern as UpdateBatchCounters:
+            // UpdLock prevents racing with dispatchers that finish concurrently,
+            // and recounting from chunks gives the accurate picture regardless
+            // of whether dispatchers updated the batch before or after us.
+            Batch.ReadIsolation := IsolationLevel::UpdLock;
             Batch.Get(BatchId);
-            Batch."Failed Chunks" := FailedToStart;
-            if FailedToStart = Batch."Total Chunks" then begin
-                Batch.Status := "PW Batch Status"::Failed;
+
+            Chunk.ReadIsolation := IsolationLevel::ReadCommitted;
+            Chunk.SetRange("Batch Id", BatchId);
+            Chunk.SetRange(Status, "PW Chunk Status"::Completed);
+            CompletedCount := Chunk.Count();
+
+            Chunk.SetRange(Status, "PW Chunk Status"::Failed);
+            FailedCount := Chunk.Count();
+
+            Batch."Completed Chunks" := CompletedCount;
+            Batch."Failed Chunks" := FailedCount;
+
+            if (CompletedCount + FailedCount) = Batch."Total Chunks" then begin
                 Batch."Completed At" := CurrentDateTime();
+                if FailedCount = 0 then
+                    Batch.Status := "PW Batch Status"::Completed
+                else if CompletedCount = 0 then
+                    Batch.Status := "PW Batch Status"::Failed
+                else
+                    Batch.Status := "PW Batch Status"::PartialFailure;
             end;
+
             Batch.Modify();
-            // Must commit failed-to-start chunk statuses and updated batch counters.
-            // Without this, exclusive locks on the Batch row block background sessions
-            // that call UpdateBatchCounters with UpdLock.
+            // Release the UpdLock so background sessions are not blocked.
             Commit();
         end;
     end;
