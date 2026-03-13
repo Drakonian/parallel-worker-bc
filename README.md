@@ -168,13 +168,13 @@ sequenceDiagram
         S1->>W1: Execute(ChunkContext)
         W1-->>S1: results
         S1->>DB: Chunk 1 → Completed + results, COMMIT
-        S1->>DB: Update Batch counters (LockTable), COMMIT
+        S1->>DB: Update Batch counters (UpdLock), COMMIT
     and Session 2
         S2->>DB: Chunk 2 → Running, COMMIT
         S2->>W2: Execute(ChunkContext)
         W2-->>S2: results
         S2->>DB: Chunk 2 → Completed + results, COMMIT
-        S2->>DB: Update Batch counters (LockTable), COMMIT
+        S2->>DB: Update Batch counters (UpdLock), COMMIT
     end
 
     BC-->>C: return true (all completed)
@@ -374,8 +374,8 @@ The library enforces strict transaction boundaries:
 2. **Workers cannot call Commit().** The dispatcher wraps your `Execute` call with `[CommitBehavior(CommitBehavior::Error)]`. If your worker tries to commit, a runtime error is raised and the chunk is marked as Failed.
 
 3. **Every Commit is documented.** Every `Commit()` call has an inline comment explaining why it exists:
-   - Coordinator: 1 per `RunFor*` call (persist batch + chunks before `StartSession`)
-   - Dispatcher: 3 per chunk at runtime (persist Running status, persist Completed/Failed status, release LockTable after counter update)
+   - Coordinator: 1 per `RunFor*` call (persist batch + chunks before `StartSession`). If any `StartSession` call fails, 2 additional commits handle failed chunk statuses and batch counter updates with `UpdLock`.
+   - Dispatcher: 3 per chunk at runtime (persist Running status, persist Completed/Failed status, release UpdLock after counter update)
 
 ### Error Handling
 
@@ -385,18 +385,18 @@ flowchart TD
     Claim --> Try["Codeunit.Run(Worker Runner)<br/>(CommitBehavior::Error)"]
     Try -->|Success| Save["Save results<br/>Mark Completed<br/>COMMIT"]
     Try -->|Failure| Capture["Capture error text + call stack<br/>Re-read chunk (Codeunit.Run rolled back)<br/>Mark Failed<br/>COMMIT"]
-    Save --> Update["UpdateBatchCounters<br/>(LockTable → recount → COMMIT)"]
+    Save --> Update["UpdateBatchCounters<br/>(UpdLock → recount → COMMIT)"]
     Capture --> Update
     Update --> Done["Session ends"]
 ```
 
 - `Codeunit.Run` catches any error from your worker, including runtime errors.
 - On failure, `Codeunit.Run` rolls back all database changes made during `Execute`. The dispatcher re-reads the chunk record and stores the error message (up to 2048 chars) and full call stack (as BLOB).
-- `UpdateBatchCounters` uses `LockTable` to serialize concurrent counter updates. When all chunks are done, it transitions the batch to `Completed`, `Failed`, or `PartialFailure`.
+- `UpdateBatchCounters` uses `UpdLock` (`ReadIsolation::UpdLock`) to serialize concurrent counter updates. When all chunks are done, it transitions the batch to `Completed`, `Failed`, or `PartialFailure`. The same UpdLock + recount pattern is used by `StartBatch` when any `StartSession` call fails, ensuring correct counters even if dispatchers finish concurrently.
 
 ### Polling
 
-`WaitForCompletion` uses `ReadIsolation::ReadUncommitted` when reading the batch status. This prevents the polling loop from being blocked by the dispatcher's `LockTable` in `UpdateBatchCounters`. Slightly stale data is acceptable because we retry every `PollInterval` milliseconds.
+`WaitForCompletion` uses `ReadIsolation::ReadUncommitted` when reading the batch status. This prevents the polling loop from being blocked by the dispatcher's `UpdLock` in `UpdateBatchCounters`. Slightly stale data is acceptable because we retry every `PollInterval` milliseconds.
 
 ## Error Handling & Recovery
 
@@ -516,10 +516,10 @@ The library ships with two pages for observing batch execution:
 
 | Type | ID | Name | Access |
 |---|---|---|---|
-| Table | 99000 | PW Batch | Internal |
-| Table | 99001 | PW Batch Chunk | Internal |
-| Enum | 99000 | PW Batch Status | Internal |
-| Enum | 99001 | PW Chunk Status | Internal |
+| Table | 99000 | PW Batch | Public |
+| Table | 99001 | PW Batch Chunk | Public |
+| Enum | 99000 | PW Batch Status | Public |
+| Enum | 99001 | PW Chunk Status | Public |
 | Enum | 99002 | PW Worker Type | Public (extensible) |
 | Interface | — | PW IParallel Worker | Public |
 | Codeunit | 99000 | PW Batch Coordinator | Public |
