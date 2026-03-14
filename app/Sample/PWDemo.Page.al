@@ -11,9 +11,9 @@ page 99100 "PW Demo"
     {
         area(Content)
         {
-            group(Input)
+            group(ListSimulation)
             {
-                Caption = 'Input';
+                Caption = 'List Simulation (RunForList)';
 
                 field(TaskCount; TaskCount)
                 {
@@ -27,6 +27,32 @@ page 99100 "PW Demo"
                     ToolTip = 'Simulated work time per item in milliseconds.';
                     MinValue = 50;
                 }
+            }
+            group(RecordCountGroup)
+            {
+                Caption = 'Record Count (RunForRecords)';
+
+                field(TableNo; TableNo)
+                {
+                    Caption = 'Table No.';
+                    ToolTip = 'Table to count records from in parallel.';
+                    MinValue = 1;
+                }
+            }
+            group(MultiTableGroup)
+            {
+                Caption = 'Multi-Table Count (RunForChunks)';
+
+                field(TableNosText; TableNosText)
+                {
+                    Caption = 'Table Numbers';
+                    ToolTip = 'Comma-separated table numbers to count in parallel (e.g. 8,9,18,27).';
+                }
+            }
+            group(Settings)
+            {
+                Caption = 'Settings';
+
                 field(ThreadCount; ThreadCount)
                 {
                     Caption = 'Thread Count';
@@ -65,6 +91,23 @@ page 99100 "PW Demo"
                     DecimalPlaces = 1 : 1;
                 }
             }
+            group(NonBlocking)
+            {
+                Caption = 'Non-Blocking (fire-and-forget)';
+
+                field(BatchIdText; BatchIdText)
+                {
+                    Caption = 'Batch ID';
+                    ToolTip = 'The ID of the running batch. Stored for later polling.';
+                    Editable = false;
+                }
+                field(ProgressText; ProgressText)
+                {
+                    Caption = 'Progress';
+                    ToolTip = 'Current progress — click Refresh to update.';
+                    Editable = false;
+                }
+            }
             group(ChunkResults)
             {
                 Caption = 'Chunk Details';
@@ -84,96 +127,132 @@ page 99100 "PW Demo"
     {
         area(Promoted)
         {
-            actionref(RunRef; Run) { }
+            group(BlockingDemos)
+            {
+                Caption = 'Blocking';
+                actionref(RunSimulationRef; RunSimulation) { }
+                actionref(RunRecordCountRef; RunRecordCount) { }
+                actionref(RunMultiTableRef; RunMultiTable) { }
+            }
+            group(NonBlockingDemos)
+            {
+                Caption = 'Non-Blocking';
+                actionref(StartRef; StartNonBlocking) { }
+                actionref(RefreshRef; RefreshProgress) { }
+                actionref(CollectRef; CollectAndCleanup) { }
+            }
         }
         area(Processing)
         {
-            action(Run)
+            action(RunSimulation)
             {
-                Caption = 'Run';
-                ToolTip = 'Run the parallel work simulation.';
+                Caption = 'Run Simulation';
+                ToolTip = 'Run the parallel list simulation (RunForList pattern).';
                 Image = Start;
 
                 trigger OnAction()
-                var
-                    Coordinator: Codeunit "PW Batch Coordinator";
-                    Items: List of [Text];
-                    Payload: JsonObject;
-                    Results: List of [JsonObject];
-                    Errors: List of [Text];
-                    ResultObj: JsonObject;
-                    Token: JsonToken;
-                    BatchId: Guid;
-                    StartTime: DateTime;
-                    ChunkIdx: Integer;
-                    ItemsProcessed: Integer;
-                    DetailsBuilder: TextBuilder;
-                    ErrorText: Text;
-                    i: Integer;
                 begin
-                    Clear(StatusText);
-                    Clear(ElapsedMs);
-                    Clear(Speedup);
-                    Clear(ChunkDetails);
+                    ClearOutput();
+                    SampleRunner.RunListSimulation(
+                        TaskCount, WorkDurationMs, ThreadCount,
+                        StatusText, ExpectedSequentialMs, ElapsedMs, Speedup, ChunkDetails);
+                end;
+            }
+            action(RunRecordCount)
+            {
+                Caption = 'Run Record Count';
+                ToolTip = 'Count records in a table using parallel sessions (RunForRecords pattern).';
+                Image = Calculate;
 
-                    ExpectedSequentialMs := TaskCount * WorkDurationMs;
+                trigger OnAction()
+                begin
+                    ClearOutput();
+                    SampleRunner.RunRecordCount(
+                        TableNo, ThreadCount,
+                        StatusText, ElapsedMs, ChunkDetails);
+                end;
+            }
+            action(RunMultiTable)
+            {
+                Caption = 'Run Multi-Table Count';
+                ToolTip = 'Count records in multiple tables simultaneously (RunForChunks pattern).';
+                Image = Splitlines;
 
-                    for i := 1 to TaskCount do
-                        Items.Add(Format(i));
+                trigger OnAction()
+                var
+                    TableNos: List of [Integer];
+                begin
+                    ClearOutput();
+                    SampleRunner.ParseTableNos(TableNosText, TableNos);
+                    SampleRunner.RunMultiTableCount(
+                        TableNos,
+                        StatusText, ElapsedMs, ChunkDetails);
+                end;
+            }
+            action(StartNonBlocking)
+            {
+                Caption = '1. Start';
+                ToolTip = 'Start a slow batch and return immediately — no waiting.';
+                Image = Start;
 
-                    Payload.Add('WorkDurationMs', WorkDurationMs);
+                trigger OnAction()
+                begin
+                    ClearOutput();
+                    NonBlockingBatchId := SampleRunner.StartListSimulation(
+                        TaskCount, WorkDurationMs, ThreadCount);
 
-                    StartTime := CurrentDateTime();
-                    BatchId := Coordinator
-                        .SetThreads(ThreadCount)
-                        .SetTimeout(300)
-                        .RunForList("PW Worker Type"::Sample, Items, Payload);
-
-                    if IsNullGuid(BatchId) then begin
-                        StatusText := 'Nothing to process.';
+                    if IsNullGuid(NonBlockingBatchId) then begin
+                        ProgressText := 'Nothing to process.';
                         exit;
                     end;
 
-                    if Coordinator.WaitForCompletion(BatchId) then begin
-                        ElapsedMs := CurrentDateTime() - StartTime;
-                        StatusText := 'Completed';
-                        if ElapsedMs > 0 then
-                            Speedup := ExpectedSequentialMs / ElapsedMs;
+                    BatchIdText := Format(NonBlockingBatchId);
+                    ProgressText := 'Started — click Refresh to check progress.';
+                end;
+            }
+            action(RefreshProgress)
+            {
+                Caption = '2. Refresh';
+                ToolTip = 'Poll the batch status without blocking.';
+                Image = Refresh;
 
-                        Coordinator.GetResults(BatchId, Results);
-                        foreach ResultObj in Results do begin
-                            ResultObj.Get('ChunkIndex', Token);
-                            ChunkIdx := Token.AsValue().AsInteger();
-                            ResultObj.Get('ItemsProcessed', Token);
-                            ItemsProcessed := Token.AsValue().AsInteger();
-                            DetailsBuilder.AppendLine(
-                                StrSubstNo('Chunk %1: %2 items', ChunkIdx, ItemsProcessed));
-                        end;
-                        ChunkDetails := DetailsBuilder.ToText();
-                    end else begin
-                        ElapsedMs := CurrentDateTime() - StartTime;
-                        StatusText := Format(Coordinator.GetStatus(BatchId));
+                trigger OnAction()
+                begin
+                    ProgressText := SampleRunner.FormatProgress(NonBlockingBatchId);
+                end;
+            }
+            action(CollectAndCleanup)
+            {
+                Caption = '3. Collect';
+                ToolTip = 'Collect results (if finished) and delete the batch records.';
+                Image = GetLines;
 
-                        Coordinator.GetErrors(BatchId, Errors);
-                        foreach ErrorText in Errors do
-                            DetailsBuilder.AppendLine(ErrorText);
-                        ChunkDetails := DetailsBuilder.ToText();
+                trigger OnAction()
+                begin
+                    if SampleRunner.CollectAndCleanup(NonBlockingBatchId, StatusText, ChunkDetails) then begin
+                        ProgressText := 'Done — batch cleaned up.';
+                        Clear(NonBlockingBatchId);
+                        Clear(BatchIdText);
                     end;
-
-                    Coordinator.Cleanup(BatchId);
                 end;
             }
         }
     }
 
     var
+        SampleRunner: Codeunit "PW Sample Runner";
+        NonBlockingBatchId: Guid;
         TaskCount: Integer;
         WorkDurationMs: Integer;
         ThreadCount: Integer;
+        TableNo: Integer;
+        TableNosText: Text;
         StatusText: Text;
         ExpectedSequentialMs: BigInteger;
         ElapsedMs: BigInteger;
         Speedup: Decimal;
+        BatchIdText: Text;
+        ProgressText: Text;
         ChunkDetails: Text;
 
     trigger OnOpenPage()
@@ -181,5 +260,18 @@ page 99100 "PW Demo"
         TaskCount := 20;
         WorkDurationMs := 200;
         ThreadCount := 4;
+        TableNo := 17;
+        TableNosText := '8,9,18,17,27';
+    end;
+
+    local procedure ClearOutput()
+    begin
+        Clear(StatusText);
+        Clear(ExpectedSequentialMs);
+        Clear(ElapsedMs);
+        Clear(Speedup);
+        Clear(BatchIdText);
+        Clear(ProgressText);
+        Clear(ChunkDetails);
     end;
 }

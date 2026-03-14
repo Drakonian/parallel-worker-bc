@@ -11,9 +11,7 @@ codeunit 99209 "PW Integration Test"
     var
         LibraryAssert: Codeunit "Library Assert";
 
-    // ═══════════════════════════════════════════════════
-    // Section 6: RunForList End-to-End
-    // ═══════════════════════════════════════════════════
+    #region RunForList End-to-End
 
     [Test]
     procedure RunForListSingleItem()
@@ -193,9 +191,9 @@ codeunit 99209 "PW Integration Test"
         Commit();
     end;
 
-    // ═══════════════════════════════════════════════════
-    // Section 7: RunForChunks End-to-End
-    // ═══════════════════════════════════════════════════
+    #endregion
+
+    #region RunForChunks End-to-End
 
     [Test]
     procedure RunForChunksWithPayloads()
@@ -273,9 +271,9 @@ codeunit 99209 "PW Integration Test"
         LibraryAssert.IsTrue(IsNullGuid(BatchId), 'Empty chunks should return null GUID');
     end;
 
-    // ═══════════════════════════════════════════════════
-    // Section 8: RunForRecords End-to-End
-    // ═══════════════════════════════════════════════════
+    #endregion
+
+    #region RunForRecords End-to-End
 
     [Test]
     procedure RunForRecordsSplitsAcrossThreads()
@@ -397,9 +395,9 @@ codeunit 99209 "PW Integration Test"
         LibraryAssert.IsTrue(IsNullGuid(BatchId), 'Zero records should return null GUID');
     end;
 
-    // ═══════════════════════════════════════════════════
-    // Section 9: Error Handling
-    // ═══════════════════════════════════════════════════
+    #endregion
+
+    #region Error Handling
 
     [Test]
     procedure WorkerErrorCaptured()
@@ -552,9 +550,9 @@ codeunit 99209 "PW Integration Test"
         Commit();
     end;
 
-    // ═══════════════════════════════════════════════════
-    // Section 10: Timeout & Configuration
-    // ═══════════════════════════════════════════════════
+    #endregion
+
+    #region Timeout & Configuration
 
     [Test]
     procedure TimeoutCausesWaitToReturnFalse()
@@ -734,4 +732,6 @@ codeunit 99209 "PW Integration Test"
         Coordinator.Cleanup(BatchId);
         Commit();
     end;
+
+    #endregion
 }

@@ -12,9 +12,7 @@ codeunit 99202 "PW Coordinator Test"
         LibraryAssert: Codeunit "Library Assert";
         TestHelper: Codeunit "PW Test Helper";
 
-    // ═══════════════════════════════════════════════════
-    // Section 2: Status & Query Methods
-    // ═══════════════════════════════════════════════════
+    #region Status & Query Methods
 
     [Test]
     procedure GetStatusReturnsRunning()
@@ -240,9 +238,9 @@ codeunit 99202 "PW Coordinator Test"
             'Non-existent batch should return 0 total chunks');
     end;
 
-    // ═══════════════════════════════════════════════════
-    // Section 3: Result Collection
-    // ═══════════════════════════════════════════════════
+    #endregion
+
+    #region Result Collection
 
     [Test]
     procedure GetResultsSingleChunkSingleResult()
@@ -496,9 +494,9 @@ codeunit 99202 "PW Coordinator Test"
         LibraryAssert.AreEqual(0, FailedInputs.Count(), 'Should return 0 failed inputs');
     end;
 
-    // ═══════════════════════════════════════════════════
-    // Section 4: Cleanup
-    // ═══════════════════════════════════════════════════
+    #endregion
+
+    #region Cleanup
 
     [Test]
     procedure CleanupDeletesBatchRecord()
@@ -555,4 +553,6 @@ codeunit 99202 "PW Coordinator Test"
         Chunk.SetRange("Batch Id", BatchId2);
         LibraryAssert.AreEqual(1, Chunk.Count(), 'Batch 2 chunks should still exist');
     end;
+
+    #endregion
 }
