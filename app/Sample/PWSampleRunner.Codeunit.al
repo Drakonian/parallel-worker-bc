@@ -8,6 +8,17 @@ codeunit 99102 "PW Sample Runner"
 {
     Access = Internal;
 
+    var
+        TableNoRecordsLbl: Label 'Table %1 has no records.', Comment = '%1 = table number';
+        CompletedRecordsLbl: Label 'Completed — %1 records across %2 chunks', Comment = '%1 = total record count, %2 = chunk count';
+        CompletedTablesLbl: Label 'Completed — %1 tables counted in parallel', Comment = '%1 = number of tables';
+        ProgressLbl: Label '%1 — %2 / %3 chunks completed', Comment = '%1 = batch status, %2 = completed chunks, %3 = total chunks';
+        ChunkPrefixLbl: Label 'Chunk %1: ', Comment = '%1 = chunk index';
+        ItemsProcessedLbl: Label '%1 items processed', Comment = '%1 = number of items';
+        RecordCountLbl: Label '%1 records', Comment = '%1 = number of records';
+        TotalCountedLbl: Label 'Total counted: %1', Comment = '%1 = total record count';
+        TableRecordCountLbl: Label ': %1 records', Comment = '%1 = record count';
+
     #region RunForList — automatic list splitting
 
     /// <summary>
@@ -93,13 +104,13 @@ codeunit 99102 "PW Sample Runner"
             .RunForRecords("PW Worker Type"::RecordCounter, RecRef, Payload);
 
         if IsNullGuid(BatchId) then begin
-            StatusText := StrSubstNo('Table %1 has no records.', TableNo);
+            StatusText := StrSubstNo(TableNoRecordsLbl, TableNo);
             exit;
         end;
 
         if Coordinator.WaitForCompletion(BatchId) then begin
             ElapsedMs := CurrentDateTime() - StartTime;
-            StatusText := StrSubstNo('Completed — %1 records across %2 chunks',
+            StatusText := StrSubstNo(CompletedRecordsLbl,
                 TotalCount, Coordinator.GetTotalChunks(BatchId));
 
             Coordinator.GetResults(BatchId, Results);
@@ -136,7 +147,6 @@ codeunit 99102 "PW Sample Runner"
         StartTime: DateTime;
         i: Integer;
     begin
-        // Build one chunk per table — each with its own payload
         for i := 1 to TableNos.Count() do begin
             Clear(Chunk);
             Chunk.Add('TableNo', TableNos.Get(i));
@@ -155,7 +165,7 @@ codeunit 99102 "PW Sample Runner"
 
         if Coordinator.WaitForCompletion(BatchId) then begin
             ElapsedMs := CurrentDateTime() - StartTime;
-            StatusText := StrSubstNo('Completed — %1 tables counted in parallel',
+            StatusText := StrSubstNo(CompletedTablesLbl,
                 Coordinator.GetTotalChunks(BatchId));
 
             Coordinator.GetResults(BatchId, Results);
@@ -222,7 +232,7 @@ codeunit 99102 "PW Sample Runner"
         if IsNullGuid(BatchId) then
             exit('No batch started.');
 
-        exit(StrSubstNo('%1 — %2 / %3 chunks completed',
+        exit(StrSubstNo(ProgressLbl,
             Coordinator.GetStatus(BatchId),
             Coordinator.GetCompletedChunks(BatchId),
             Coordinator.GetTotalChunks(BatchId)));
@@ -274,9 +284,9 @@ codeunit 99102 "PW Sample Runner"
         for i := 1 to Results.Count() do begin
             ResultObj := Results.Get(i);
             ResultObj.Get('ChunkIndex', Token);
-            Builder.Append(StrSubstNo('Chunk %1: ', Token.AsValue().AsInteger()));
+            Builder.Append(StrSubstNo(ChunkPrefixLbl, Token.AsValue().AsInteger()));
             ResultObj.Get('ItemsProcessed', Token);
-            Builder.AppendLine(StrSubstNo('%1 items processed', Token.AsValue().AsInteger()));
+            Builder.AppendLine(StrSubstNo(ItemsProcessedLbl, Token.AsValue().AsInteger()));
         end;
         exit(Builder.ToText());
     end;
@@ -293,13 +303,13 @@ codeunit 99102 "PW Sample Runner"
         for i := 1 to Results.Count() do begin
             ResultObj := Results.Get(i);
             ResultObj.Get('ChunkIndex', Token);
-            Builder.Append(StrSubstNo('Chunk %1: ', Token.AsValue().AsInteger()));
+            Builder.Append(StrSubstNo(ChunkPrefixLbl, Token.AsValue().AsInteger()));
             ResultObj.Get('RecordCount', Token);
             RecordCount := Token.AsValue().AsInteger();
-            Builder.AppendLine(StrSubstNo('%1 records', RecordCount));
+            Builder.AppendLine(StrSubstNo(RecordCountLbl, RecordCount));
             TotalCounted += RecordCount;
         end;
-        Builder.AppendLine(StrSubstNo('Total counted: %1', TotalCounted));
+        Builder.AppendLine(StrSubstNo(TotalCountedLbl, TotalCounted));
         exit(Builder.ToText());
     end;
 
@@ -315,7 +325,7 @@ codeunit 99102 "PW Sample Runner"
             ResultObj.Get('TableName', Token);
             Builder.Append(Token.AsValue().AsText());
             ResultObj.Get('RecordCount', Token);
-            Builder.AppendLine(StrSubstNo(': %1 records', Token.AsValue().AsInteger()));
+            Builder.AppendLine(StrSubstNo(TableRecordCountLbl, Token.AsValue().AsInteger()));
         end;
         exit(Builder.ToText());
     end;

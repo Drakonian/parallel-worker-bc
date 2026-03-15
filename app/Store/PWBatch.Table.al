@@ -53,7 +53,7 @@ table 99000 "PW Batch"
             Caption = 'Completed At';
             DataClassification = SystemMetadata;
         }
-        field(10; "Company Name"; Text[30])
+        field(10; "Company Name"; Text[150])
         {
             Caption = 'Company Name';
             DataClassification = SystemMetadata;

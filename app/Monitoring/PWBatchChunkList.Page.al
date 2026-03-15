@@ -6,6 +6,7 @@ page 99001 "PW Batch Chunk List"
     Caption = 'PW Batch Chunks';
     PageType = List;
     SourceTable = "PW Batch Chunk";
+    UsageCategory = None;
     Editable = false;
 
     layout

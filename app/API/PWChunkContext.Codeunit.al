@@ -13,7 +13,7 @@ codeunit 99001 "PW Chunk Context"
         BatchId: Guid;
         ChunkIndex: Integer;
         IsInitialized: Boolean;
-        KeyNotFoundErr: Label 'Key "%1" not found in chunk input.';
+        KeyNotFoundErr: Label 'Key "%1" not found in chunk input.', Comment = '%1 = JSON key name';
         NotRecordChunkErr: Label 'This chunk was not created via RunForRecords.';
         NotInitializedErr: Label 'Chunk context has not been initialized.';
 

@@ -511,7 +511,7 @@ codeunit 99000 "PW Batch Coordinator"
         Batch."Total Chunks" := TotalChunks;
         Batch."Timeout Seconds" := TimeoutSeconds;
         Batch."Created At" := CurrentDateTime();
-        Batch."Company Name" := CompanyName();
+        Batch."Company Name" := CopyStr(CompanyName(), 1, MaxStrLen(Batch."Company Name"));
         Batch.Insert();
         exit(Batch.Id);
     end;

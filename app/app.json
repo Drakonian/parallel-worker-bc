@@ -3,13 +3,14 @@
   "name": "Parallel Worker",
   "publisher": "Volodymyr Dvernytskyi",
   "version": "1.0.0.0",
-  "brief": "",
-  "description": "",
-  "privacyStatement": "",
-  "EULA": "",
-  "help": "",
-  "url": "",
-  "logo": "",
+  "brief": "Run AL workloads in parallel using background sessions.",
+  "description": "Parallel Worker splits work across multiple background sessions in Business Central, with automatic chunking, timeout handling, error capture, and result collection.",
+  "privacyStatement": "https://vld-bc.com/",
+  "EULA": "https://vld-bc.com/",
+  "help": "https://vld-bc.com/",
+  "url": "https://vld-bc.com/",
+  "contextSensitiveHelpUrl": "https://vld-bc.com/",
+  "logo": "./Logo/logo.svg",
   "dependencies": [],
   "screenshots": [],
   "platform": "27.0.0.0",
@@ -27,6 +28,7 @@
   },
   "runtime": "16.0",
   "features": [
-    "NoImplicitWith"
+    "NoImplicitWith",
+    "TranslationFile"
   ]
 }
