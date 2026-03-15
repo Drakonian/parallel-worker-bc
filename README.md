@@ -415,6 +415,76 @@ When `SetSessionTimeout` is configured, the platform kills background sessions t
 
 `WaitForCompletion` handles this automatically. After the session timeout plus a short margin, it checks each `Running` chunk using `Session.IsSessionActive`. If the session is dead, the chunk is marked `Failed` with a "Session terminated" error message, and batch counters are recounted using the same UpdLock pattern as `UpdateBatchCounters`. This ensures the batch reaches a terminal status (`Failed` or `PartialFailure`) even when sessions are killed by timeout.
 
+### Timeout Behavior
+
+`SetBatchTimeout` and `SetSessionTimeout` are independent and serve different purposes:
+
+```mermaid
+sequenceDiagram
+    participant C as Caller (WaitForCompletion)
+    participant S1 as Session 1 (fast worker)
+    participant S2 as Session 2 (hung worker)
+
+    Note over C: SetBatchTimeout(5s), SetSessionTimeout(3s)
+
+    C->>S1: StartSession
+    C->>S2: StartSession
+    C->>C: Poll batch status...
+
+    S1->>S1: Execute (finishes in 1s)
+    S1-->>C: Chunk 1 → Completed
+
+    Note over S2: Worker is hung (infinite loop)
+
+    Note over S2: 3s: Platform kills session (SessionTimeout)
+    Note over C: 5s: BatchTimeout → still polling
+
+    C->>C: SessionTimeout + margin elapsed
+    C->>C: IsSessionActive(S2) → false
+    C->>C: Mark chunk 2 Failed
+    C->>C: RecountBatchCounters → PartialFailure
+    C-->>C: return false
+```
+
+| Timeout | Scope | What happens on expiry | Status updated? |
+|---|---|---|---|
+| `SetBatchTimeout` | Caller session | `WaitForCompletion` returns `false` | No — sessions keep running |
+| `SetSessionTimeout` | Each background session | Platform kills the session | Yes — `WaitForCompletion` detects via `IsSessionActive` and marks chunk `Failed` |
+
+### Concurrency & Locking
+
+Multiple dispatchers finish concurrently and update the same batch row. `UpdLock` serializes these updates:
+
+```mermaid
+sequenceDiagram
+    participant S1 as Dispatcher 1
+    participant DB as PW Batch row
+    participant S2 as Dispatcher 2
+
+    Note over S1,S2: Both chunks finish at nearly the same time
+
+    S1->>DB: Chunk 1 → Completed, COMMIT
+    S2->>DB: Chunk 2 → Completed, COMMIT
+
+    S1->>DB: UpdLock on Batch (acquires U lock)
+    S2->>DB: UpdLock on Batch (BLOCKED — waits)
+
+    S1->>DB: Count chunks: Completed=1, Failed=0
+    Note over S1,DB: 1+0 ≠ 2 → status stays Running
+    S1->>DB: Modify(Completed=1), COMMIT (releases lock)
+
+    Note over S2: Unblocked — acquires U lock
+    S2->>DB: Count chunks: Completed=2, Failed=0
+    Note over S2,DB: 2+0 = 2 = Total → Completed!
+    S2->>DB: Modify(Completed=2, Status=Completed), COMMIT
+```
+
+The last dispatcher to acquire the lock always has the most up-to-date count. This same UpdLock + recount pattern is used in three places:
+
+1. **`UpdateBatchCounters`** (dispatcher) — after each chunk finishes
+2. **`StartBatch`** (coordinator) — when `StartSession` fails for some chunks
+3. **`RecoverDeadSessions`** (coordinator) — when `IsSessionActive` detects killed sessions
+
 ## Error Handling & Recovery
 
 ### Handling partial failures
