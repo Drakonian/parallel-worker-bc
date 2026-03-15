@@ -734,4 +734,249 @@ codeunit 99209 "PW Integration Test"
     end;
 
     #endregion
+
+    #region RunAndWait convenience methods
+
+    [Test]
+    procedure RunAndWaitForListSuccess()
+    // [SCENARIO 11.1] RunAndWaitForList returns true and collects results on success
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+        ResultObj: JsonObject;
+        Token: JsonToken;
+        TotalItems: Integer;
+        i: Integer;
+    begin
+        for i := 1 to 6 do
+            Items.Add(StrSubstNo('Item-%1', i));
+
+        LibraryAssert.IsTrue(
+            Coordinator.SetThreads(2).SetTimeout(30).RunAndWaitForList(
+                "PW Worker Type"::TestWorker, Items, Payload, Results),
+            'RunAndWaitForList should return true');
+
+        TotalItems := 0;
+        for i := 1 to Results.Count() do begin
+            ResultObj := Results.Get(i);
+            ResultObj.Get('ItemCount', Token);
+            TotalItems += Token.AsValue().AsInteger();
+        end;
+        LibraryAssert.AreEqual(6, TotalItems, 'All items should be processed');
+
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitForListFailure()
+    // [SCENARIO 11.2] RunAndWaitForList returns false on failure, results empty
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Chunks: List of [JsonObject];
+        Chunk: JsonObject;
+        Results: List of [JsonObject];
+    begin
+        Chunk.Add('$ShouldFail', true);
+        Chunks.Add(Chunk);
+
+        LibraryAssert.IsFalse(
+            Coordinator.SetTimeout(30).RunAndWaitForChunks(
+                "PW Worker Type"::TestWorker, Chunks, Results),
+            'Should return false on failure');
+
+        LibraryAssert.AreEqual(0, Results.Count(), 'Results should be empty on failure');
+
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitForListEmptyList()
+    // [SCENARIO 11.3] RunAndWaitForList with empty list returns true
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+    begin
+        LibraryAssert.IsTrue(
+            Coordinator.RunAndWaitForList(
+                "PW Worker Type"::TestWorker, Items, Payload, Results),
+            'Empty list should return true');
+
+        LibraryAssert.AreEqual(0, Results.Count(), 'Results should be empty');
+    end;
+
+    [Test]
+    procedure RunAndWaitForRecordsSuccess()
+    // [SCENARIO 11.4] RunAndWaitForRecords returns true and counts match
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        TestBatch: Record "PW Batch";
+        RecRef: RecordRef;
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+        ResultObj: JsonObject;
+        Token: JsonToken;
+        ActualTotal: Integer;
+        i: Integer;
+    begin
+        TestBatch.SetRange("Company Name", 'PW_TEST_RAW');
+        TestBatch.DeleteAll();
+
+        for i := 1 to 4 do begin
+            Clear(TestBatch);
+            TestBatch.Id := CreateGuid();
+            TestBatch.Status := "PW Batch Status"::Pending;
+            TestBatch."Company Name" := 'PW_TEST_RAW';
+            TestBatch.Insert();
+        end;
+        Commit();
+
+        TestBatch.Reset();
+        TestBatch.SetRange("Company Name", 'PW_TEST_RAW');
+        RecRef.GetTable(TestBatch);
+
+        LibraryAssert.IsTrue(
+            Coordinator.SetThreads(2).SetTimeout(30).RunAndWaitForRecords(
+                "PW Worker Type"::TestRecordWorker, RecRef, Payload, Results),
+            'RunAndWaitForRecords should return true');
+
+        ActualTotal := 0;
+        for i := 1 to Results.Count() do begin
+            ResultObj := Results.Get(i);
+            ResultObj.Get('RecordCount', Token);
+            ActualTotal += Token.AsValue().AsInteger();
+        end;
+        LibraryAssert.AreEqual(4, ActualTotal, 'Total records should match');
+
+        TestBatch.Reset();
+        TestBatch.SetRange("Company Name", 'PW_TEST_RAW');
+        TestBatch.DeleteAll();
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitForRecordsEmptyTable()
+    // [SCENARIO 11.5] RunAndWaitForRecords with zero records returns true
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        TestBatch: Record "PW Batch";
+        RecRef: RecordRef;
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+    begin
+        TestBatch.SetRange("Company Name", 'PW_NONEXISTENT_RAW');
+        RecRef.GetTable(TestBatch);
+
+        LibraryAssert.IsTrue(
+            Coordinator.RunAndWaitForRecords(
+                "PW Worker Type"::TestRecordWorker, RecRef, Payload, Results),
+            'Empty table should return true');
+
+        LibraryAssert.AreEqual(0, Results.Count(), 'Results should be empty');
+    end;
+
+    [Test]
+    procedure RunAndWaitForChunksSuccess()
+    // [SCENARIO 11.6] RunAndWaitForChunks returns true and collects results
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Chunks: List of [JsonObject];
+        Chunk: JsonObject;
+        Items: JsonArray;
+        Results: List of [JsonObject];
+    begin
+        Items.Add('A');
+        Items.Add('B');
+        Chunk.Add('$Items', Items);
+        Chunks.Add(Chunk);
+
+        Clear(Chunk);
+        Clear(Items);
+        Items.Add('C');
+        Chunk.Add('$Items', Items);
+        Chunks.Add(Chunk);
+
+        LibraryAssert.IsTrue(
+            Coordinator.SetTimeout(30).RunAndWaitForChunks(
+                "PW Worker Type"::TestWorker, Chunks, Results),
+            'RunAndWaitForChunks should return true');
+
+        LibraryAssert.AreEqual(2, Results.Count(), 'Should have 2 results');
+
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitForChunksEmptyList()
+    // [SCENARIO 11.7] RunAndWaitForChunks with empty list returns true
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Chunks: List of [JsonObject];
+        Results: List of [JsonObject];
+    begin
+        LibraryAssert.IsTrue(
+            Coordinator.RunAndWaitForChunks(
+                "PW Worker Type"::TestWorker, Chunks, Results),
+            'Empty chunks should return true');
+
+        LibraryAssert.AreEqual(0, Results.Count(), 'Results should be empty');
+    end;
+
+    [Test]
+    procedure RunAndWaitCleansUpAfterSuccess()
+    // [SCENARIO 11.8] RunAndWait deletes batch and chunk records after success
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Batch: Record "PW Batch";
+        Chunk: Record "PW Batch Chunk";
+        Items: List of [Text];
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+        BatchCountBefore: Integer;
+    begin
+        Batch.Reset();
+        BatchCountBefore := Batch.Count();
+
+        Items.Add('X');
+        Coordinator.SetThreads(1).SetTimeout(30).RunAndWaitForList(
+            "PW Worker Type"::TestWorker, Items, Payload, Results);
+
+        // Batch records should be cleaned up — count should be same as before
+        Batch.Reset();
+        LibraryAssert.AreEqual(BatchCountBefore, Batch.Count(),
+            'Batch should be cleaned up after RunAndWait');
+
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitCleansUpAfterFailure()
+    // [SCENARIO 11.9] RunAndWait deletes batch and chunk records after failure
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Batch: Record "PW Batch";
+        Chunks: List of [JsonObject];
+        Chunk: JsonObject;
+        Results: List of [JsonObject];
+        BatchCountBefore: Integer;
+    begin
+        Batch.Reset();
+        BatchCountBefore := Batch.Count();
+
+        Chunk.Add('Data', 'test');
+        Chunks.Add(Chunk);
+        Coordinator.SetTimeout(30).RunAndWaitForChunks(
+            "PW Worker Type"::TestErrorWorker, Chunks, Results);
+
+        Batch.Reset();
+        LibraryAssert.AreEqual(BatchCountBefore, Batch.Count(),
+            'Batch should be cleaned up even after failure');
+
+        Commit();
+    end;
+
+    #endregion
 }

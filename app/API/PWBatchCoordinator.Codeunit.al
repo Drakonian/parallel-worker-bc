@@ -377,6 +377,95 @@ codeunit 99000 "PW Batch Coordinator"
     end;
 
     /// <summary>
+    /// Convenience method: runs a list of items in parallel, waits for completion,
+    /// collects results, and cleans up — all in one call.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="Items">The list of text items to distribute across chunks.</param>
+    /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
+    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
+    procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; BasePayload: JsonObject; var Results: List of [JsonObject]): Boolean
+    var
+        BatchId: Guid;
+        Success: Boolean;
+    begin
+        BatchId := RunForList(WorkerType, Items, BasePayload);
+        if IsNullGuid(BatchId) then begin
+            Clear(Results);
+            exit(true);
+        end;
+
+        Success := WaitForCompletion(BatchId);
+        if Success then
+            GetResults(BatchId, Results)
+        else
+            Clear(Results);
+
+        Cleanup(BatchId);
+        exit(Success);
+    end;
+
+    /// <summary>
+    /// Convenience method: splits a filtered record set across threads, waits for completion,
+    /// collects results, and cleans up — all in one call.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
+    /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
+    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
+    procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; BasePayload: JsonObject; var Results: List of [JsonObject]): Boolean
+    var
+        BatchId: Guid;
+        Success: Boolean;
+    begin
+        BatchId := RunForRecords(WorkerType, RecRef, BasePayload);
+        if IsNullGuid(BatchId) then begin
+            Clear(Results);
+            exit(true);
+        end;
+
+        Success := WaitForCompletion(BatchId);
+        if Success then
+            GetResults(BatchId, Results)
+        else
+            Clear(Results);
+
+        Cleanup(BatchId);
+        exit(Success);
+    end;
+
+    /// <summary>
+    /// Convenience method: runs pre-built chunks in parallel, waits for completion,
+    /// collects results, and cleans up — all in one call.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="Chunks">A list of JSON objects, each representing the full input for one chunk.</param>
+    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
+    procedure RunAndWaitForChunks(WorkerType: Enum "PW Worker Type"; Chunks: List of [JsonObject]; var Results: List of [JsonObject]): Boolean
+    var
+        BatchId: Guid;
+        Success: Boolean;
+    begin
+        BatchId := RunForChunks(WorkerType, Chunks);
+        if IsNullGuid(BatchId) then begin
+            Clear(Results);
+            exit(true);
+        end;
+
+        Success := WaitForCompletion(BatchId);
+        if Success then
+            GetResults(BatchId, Results)
+        else
+            Clear(Results);
+
+        Cleanup(BatchId);
+        exit(Success);
+    end;
+
+    /// <summary>
     /// Deletes all batch and chunk records for the specified batch.
     /// </summary>
     /// <param name="BatchId">The batch identifier.</param>

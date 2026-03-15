@@ -78,26 +78,24 @@ var
     Items: List of [Text];
     Results: List of [JsonObject];
     Payload: JsonObject;
-    BatchId: Guid;
 begin
     // Build your work items
     Items.Add('INV-001');
     Items.Add('INV-002');
     // ... add more
 
-    BatchId := Coordinator
-        .SetThreads(4)
-        .SetTimeout(120)
-        .RunForList("PW Worker Type"::InvoicePoster, Items, Payload);
-
-    if Coordinator.WaitForCompletion(BatchId) then begin
-        Coordinator.GetResults(BatchId, Results);
-        // Process results...
-    end;
-
-    Coordinator.Cleanup(BatchId);
+    // One call: run in parallel, wait, collect results, clean up
+    if Coordinator.SetThreads(4).SetTimeout(120).RunAndWaitForList(
+        "PW Worker Type"::InvoicePoster, Items, Payload, Results)
+    then
+        // All chunks succeeded — process Results
+    else
+        // Some or all chunks failed
+        Message('Batch failed.');
 end;
 ```
+
+For advanced scenarios (non-blocking, retry, progress polling), use the granular API instead — see [Coordinator API Reference](#coordinator-api-reference).
 
 ## Architecture
 
@@ -292,7 +290,19 @@ begin
 
 All three methods return `this`, so you can chain them.
 
-### Execution
+### Simple API (run + wait + collect + cleanup in one call)
+
+| Method | Description |
+|---|---|
+| `RunAndWaitForList(WorkerType, Items, Payload, var Results): Boolean` | Split a list, wait, collect results, clean up |
+| `RunAndWaitForRecords(WorkerType, RecRef, Payload, var Results): Boolean` | Split records, wait, collect results, clean up |
+| `RunAndWaitForChunks(WorkerType, Chunks, var Results): Boolean` | Run chunks, wait, collect results, clean up |
+
+Returns `true` if all chunks succeeded. On failure, `Results` is empty — use the granular API below if you need error details or retry.
+
+### Granular API (for non-blocking, retry, progress polling)
+
+**Execution** — returns a `BatchId` for later use:
 
 | Method | Description |
 |---|---|
@@ -300,7 +310,7 @@ All three methods return `this`, so you can chain them.
 | `RunForList(WorkerType, Items, Payload): Guid` | Split a List of [Text] across threads |
 | `RunForChunks(WorkerType, Chunks): Guid` | One chunk per JsonObject, no auto-splitting |
 
-### Waiting & Status
+**Waiting & Status:**
 
 | Method | Description |
 |---|---|
@@ -310,7 +320,7 @@ All three methods return `this`, so you can chain them.
 | `GetCompletedChunks(BatchId): Integer` | Number of successfully completed chunks. |
 | `GetTotalChunks(BatchId): Integer` | Total chunks in the batch. |
 
-### Results & Errors
+**Results & Errors:**
 
 | Method | Description |
 |---|---|
@@ -318,7 +328,7 @@ All three methods return `this`, so you can chain them.
 | `GetErrors(BatchId, var Errors)` | Collects error messages from failed chunks. |
 | `GetFailedChunkInputs(BatchId, var FailedInputs)` | Returns original input payloads of failed chunks (for retry). |
 
-### Cleanup
+**Cleanup:**
 
 | Method | Description |
 |---|---|
