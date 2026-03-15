@@ -113,6 +113,11 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table PW Batch Chunk - Field Status - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Codeunit 797980843 - NamedType 1294502618" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Session terminated (timeout or server stop).</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Codeunit PW Batch Coordinator - NamedType SessionTerminatedErr</note>
+        </trans-unit>
         <trans-unit id="Codeunit 797980843 - NamedType 3772275472" size-unit="char" translate="yes" xml:space="preserve">
           <source>Cannot start a parallel batch while a write transaction is active. Commit or rollback your changes before calling RunFor* methods, otherwise they would be silently committed.</source>
           <note from="Developer" annotates="general" priority="2"></note>

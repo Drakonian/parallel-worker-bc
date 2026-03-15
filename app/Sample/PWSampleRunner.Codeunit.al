@@ -47,7 +47,7 @@ codeunit 99102 "PW Sample Runner"
         StartTime := CurrentDateTime();
         BatchId := Coordinator
             .SetThreads(ThreadCount)
-            .SetTimeout(300)
+            .SetBatchTimeout(300)
             .RunForList("PW Worker Type"::Sample, Items, Payload);
 
         if IsNullGuid(BatchId) then begin
@@ -100,7 +100,7 @@ codeunit 99102 "PW Sample Runner"
         StartTime := CurrentDateTime();
         BatchId := Coordinator
             .SetThreads(ThreadCount)
-            .SetTimeout(300)
+            .SetBatchTimeout(300)
             .RunForRecords("PW Worker Type"::RecordCounter, RecRef, Payload);
 
         if IsNullGuid(BatchId) then begin
@@ -155,7 +155,7 @@ codeunit 99102 "PW Sample Runner"
 
         StartTime := CurrentDateTime();
         BatchId := Coordinator
-            .SetTimeout(300)
+            .SetBatchTimeout(300)
             .RunForChunks("PW Worker Type"::TableCounter, Chunks);
 
         if IsNullGuid(BatchId) then begin

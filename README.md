@@ -85,7 +85,7 @@ begin
     // ... add more
 
     // One call: run in parallel, wait, collect results, clean up
-    if Coordinator.SetThreads(4).SetTimeout(120).RunAndWaitForList(
+    if Coordinator.SetThreads(4).SetBatchTimeout(120).RunAndWaitForList(
         "PW Worker Type"::InvoicePoster, Items, Payload, Results)
     then
         // All chunks succeeded — process Results
@@ -283,12 +283,13 @@ var
 begin
     BatchId := Coordinator
         .SetThreads(8)           // Background sessions (default: 4)
-        .SetTimeout(60)          // Max wait in seconds (default: 0 = no limit)
+        .SetBatchTimeout(60)     // Caller stops waiting after 60s — sessions keep running (default: 0 = wait forever)
+        .SetSessionTimeout(30000)// Platform kills any session after 30s — dead sessions auto-detected (default: 0 = no limit)
         .SetPollInterval(200)    // Polling interval in ms (default: 500)
         .RunForList(...);
 ```
 
-All three methods return `this`, so you can chain them.
+All four methods return `this`, so you can chain them.
 
 ### Simple API (run + wait + collect + cleanup in one call)
 
@@ -407,6 +408,12 @@ flowchart TD
 ### Polling
 
 `WaitForCompletion` uses `ReadIsolation::ReadUncommitted` when reading the batch status. This prevents the polling loop from being blocked by the dispatcher's `UpdLock` in `UpdateBatchCounters`. Slightly stale data is acceptable because we retry every `PollInterval` milliseconds.
+
+### Dead Session Recovery
+
+When `SetSessionTimeout` is configured, the platform kills background sessions that exceed the time limit. However, this is a hard kill — the dispatcher's error handling never runs, leaving the chunk stuck in `Running` status.
+
+`WaitForCompletion` handles this automatically. After the session timeout plus a short margin, it checks each `Running` chunk using `Session.IsSessionActive`. If the session is dead, the chunk is marked `Failed` with a "Session terminated" error message, and batch counters are recounted using the same UpdLock pattern as `UpdateBatchCounters`. This ensures the batch reaches a terminal status (`Failed` or `PartialFailure`) even when sessions are killed by timeout.
 
 ## Error Handling & Recovery
 
@@ -544,7 +551,7 @@ The library ships with two pages for observing batch execution:
 
 1. **No restart survival.** Background sessions created via `StartSession` don't survive server restarts. If the service restarts mid-batch, running chunks will be stuck. Use the monitoring pages to identify and clean up stuck batches.
 
-2. **No cancellation.** Once a batch is started, there's no way to cancel running chunks. You can only wait for them to finish or time out.
+2. **No cancellation.** Once a batch is started, there's no way to cancel running chunks. You can wait for them to finish, let `SetBatchTimeout` stop polling, or use `SetSessionTimeout` to have the platform kill sessions that exceed a time limit.
 
 3. **No cross-chunk communication.** Each chunk is fully isolated. If you need map-reduce style aggregation, do the "reduce" step in your caller after `GetResults`.
 

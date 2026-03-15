@@ -27,7 +27,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(1)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
@@ -57,7 +57,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(3)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
@@ -90,7 +90,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(3)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -114,7 +114,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(5)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -151,7 +151,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(1)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'WaitForCompletion should return true');
@@ -178,7 +178,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(2)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -218,7 +218,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk);
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestWorker, Chunks);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
@@ -247,7 +247,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(10)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestWorker, Chunks);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -311,7 +311,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(2)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForRecords("PW Worker Type"::TestRecordWorker, RecRef, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
@@ -361,7 +361,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(5)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForRecords("PW Worker Type"::TestRecordWorker, RecRef, Payload);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -413,7 +413,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk);
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestErrorWorker, Chunks);
 
         LibraryAssert.IsFalse(Coordinator.WaitForCompletion(BatchId), 'Should return false for failed batch');
@@ -445,7 +445,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(FailChunk);
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestWorker, Chunks);
 
         LibraryAssert.IsFalse(Coordinator.WaitForCompletion(BatchId), 'Should return false');
@@ -479,7 +479,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk2);
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestErrorWorker, Chunks);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -506,7 +506,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk);
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestErrorWorker, Chunks);
 
         Coordinator.WaitForCompletion(BatchId);
@@ -534,7 +534,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk);
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForChunks("PW Worker Type"::TestCommitWorker, Chunks);
 
         LibraryAssert.IsFalse(Coordinator.WaitForCompletion(BatchId),
@@ -568,7 +568,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(1)
-            .SetTimeout(1)
+            .SetBatchTimeout(1)
             .SetPollInterval(100)
             .RunForList("PW Worker Type"::Sample, Items, Payload);
 
@@ -591,7 +591,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(1)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .SetPollInterval(200)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
@@ -613,7 +613,7 @@ codeunit 99209 "PW Integration Test"
         Items.Add('Item-001');
 
         BatchId := Coordinator
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::TestWorker, Items, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete with default threads');
@@ -658,7 +658,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(3)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForRecords("PW Worker Type"::TestRecordWorker, RecRef, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
@@ -718,7 +718,7 @@ codeunit 99209 "PW Integration Test"
 
         BatchId := Coordinator
             .SetThreads(1)
-            .SetTimeout(30)
+            .SetBatchTimeout(30)
             .RunForList("PW Worker Type"::Sample, Items, Payload);
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Sample worker should complete');
@@ -754,7 +754,7 @@ codeunit 99209 "PW Integration Test"
             Items.Add(StrSubstNo('Item-%1', i));
 
         LibraryAssert.IsTrue(
-            Coordinator.SetThreads(2).SetTimeout(30).RunAndWaitForList(
+            Coordinator.SetThreads(2).SetBatchTimeout(30).RunAndWaitForList(
                 "PW Worker Type"::TestWorker, Items, Payload, Results),
             'RunAndWaitForList should return true');
 
@@ -782,7 +782,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk);
 
         LibraryAssert.IsFalse(
-            Coordinator.SetTimeout(30).RunAndWaitForChunks(
+            Coordinator.SetBatchTimeout(30).RunAndWaitForChunks(
                 "PW Worker Type"::TestWorker, Chunks, Results),
             'Should return false on failure');
 
@@ -839,7 +839,7 @@ codeunit 99209 "PW Integration Test"
         RecRef.GetTable(TestBatch);
 
         LibraryAssert.IsTrue(
-            Coordinator.SetThreads(2).SetTimeout(30).RunAndWaitForRecords(
+            Coordinator.SetThreads(2).SetBatchTimeout(30).RunAndWaitForRecords(
                 "PW Worker Type"::TestRecordWorker, RecRef, Payload, Results),
             'RunAndWaitForRecords should return true');
 
@@ -900,7 +900,7 @@ codeunit 99209 "PW Integration Test"
         Chunks.Add(Chunk);
 
         LibraryAssert.IsTrue(
-            Coordinator.SetTimeout(30).RunAndWaitForChunks(
+            Coordinator.SetBatchTimeout(30).RunAndWaitForChunks(
                 "PW Worker Type"::TestWorker, Chunks, Results),
             'RunAndWaitForChunks should return true');
 
@@ -941,7 +941,7 @@ codeunit 99209 "PW Integration Test"
         BatchCountBefore := Batch.Count();
 
         Items.Add('X');
-        Coordinator.SetThreads(1).SetTimeout(30).RunAndWaitForList(
+        Coordinator.SetThreads(1).SetBatchTimeout(30).RunAndWaitForList(
             "PW Worker Type"::TestWorker, Items, Payload, Results);
 
         // Batch records should be cleaned up — count should be same as before
@@ -968,13 +968,125 @@ codeunit 99209 "PW Integration Test"
 
         Chunk.Add('Data', 'test');
         Chunks.Add(Chunk);
-        Coordinator.SetTimeout(30).RunAndWaitForChunks(
+        Coordinator.SetBatchTimeout(30).RunAndWaitForChunks(
             "PW Worker Type"::TestErrorWorker, Chunks, Results);
 
         Batch.Reset();
         LibraryAssert.AreEqual(BatchCountBefore, Batch.Count(),
             'Batch should be cleaned up even after failure');
 
+        Commit();
+    end;
+
+    #endregion
+
+    #region Session timeout
+
+    [Test]
+    procedure SessionTimeoutKillsHungWorker()
+    // [SCENARIO 13.1] SetSessionTimeout kills a worker that exceeds the limit.
+    // Worker sleeps 10s, session timeout is 2s — platform kills the session.
+    // WaitForCompletion detects the dead session via IsSessionActive,
+    // marks the chunk as Failed, and recounts batch counters.
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Payload: JsonObject;
+        Errors: List of [Text];
+        BatchId: Guid;
+    begin
+        Items.Add('HungItem');
+        Payload.Add('WorkDurationMs', 10000);
+
+        BatchId := Coordinator
+            .SetThreads(1)
+            .SetBatchTimeout(10)
+            .SetSessionTimeout(2000)
+            .RunForList("PW Worker Type"::Sample, Items, Payload);
+
+        // WaitForCompletion detects the dead session after session timeout + margin,
+        // marks it Failed, and returns false.
+        LibraryAssert.IsFalse(Coordinator.WaitForCompletion(BatchId),
+            'Batch should fail — session was killed by timeout');
+        LibraryAssert.IsTrue(
+            Coordinator.GetStatus(BatchId) = "PW Batch Status"::Failed,
+            'Status should be Failed');
+
+        Coordinator.GetErrors(BatchId, Errors);
+        LibraryAssert.AreEqual(1, Errors.Count(), 'Should have 1 error from killed session');
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure SessionTimeoutDoesNotKillFastWorker()
+    // [SCENARIO 13.2] SetSessionTimeout does not affect workers that finish in time.
+    // Worker sleeps 50ms per item, session timeout is 30s — completes normally.
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+        BatchId: Guid;
+    begin
+        Items.Add('FastItem');
+        Payload.Add('WorkDurationMs', 50);
+
+        BatchId := Coordinator
+            .SetThreads(1)
+            .SetBatchTimeout(30)
+            .SetSessionTimeout(30000)
+            .RunForList("PW Worker Type"::Sample, Items, Payload);
+
+        LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId),
+            'Batch should complete — worker finished within session timeout');
+
+        Coordinator.GetResults(BatchId, Results);
+        LibraryAssert.AreEqual(1, Results.Count(), 'Should have 1 result');
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure BatchTimeoutReturnsFalseButSessionContinues()
+    // [SCENARIO 13.3] SetBatchTimeout expires before the worker finishes,
+    // but SetSessionTimeout is longer — WaitForCompletion returns false while session still runs.
+    // After waiting a bit more, the session finishes and batch reaches terminal status.
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Payload: JsonObject;
+        BatchId: Guid;
+    begin
+        Items.Add('SlowItem');
+        Payload.Add('WorkDurationMs', 5000);
+
+        BatchId := Coordinator
+            .SetThreads(1)
+            .SetBatchTimeout(1)
+            .SetSessionTimeout(30000)
+            .SetPollInterval(100)
+            .RunForList("PW Worker Type"::Sample, Items, Payload);
+
+        // Batch timeout expires — returns false, but session is still running
+        LibraryAssert.IsFalse(Coordinator.WaitForCompletion(BatchId),
+            'Should return false — batch timeout expired');
+        LibraryAssert.IsFalse(Coordinator.IsFinished(BatchId),
+            'Batch should still be running — session timeout has not expired');
+
+        // Wait for the session to actually finish (5s worker + margin)
+        Sleep(6000);
+
+        // Now the session should have finished
+        LibraryAssert.IsTrue(Coordinator.IsFinished(BatchId),
+            'Batch should be finished after session completes');
+        LibraryAssert.IsTrue(
+            Coordinator.GetStatus(BatchId) = "PW Batch Status"::Completed,
+            'Status should be Completed — session finished successfully');
+
+        Coordinator.Cleanup(BatchId);
         Commit();
     end;
 
