@@ -60,6 +60,12 @@ page 99100 "PW Demo"
                     MinValue = 1;
                     MaxValue = 10;
                 }
+                field(SessionTimeoutMs; SessionTimeoutMs)
+                {
+                    Caption = 'Session Timeout (ms)';
+                    ToolTip = 'Max runtime per background session. Platform kills the session if exceeded. 0 = no limit.';
+                    MinValue = 0;
+                }
             }
             group(Output)
             {
@@ -153,6 +159,7 @@ page 99100 "PW Demo"
                 trigger OnAction()
                 begin
                     ClearOutput();
+                    SampleRunner.SetSessionTimeout(SessionTimeoutMs);
                     SampleRunner.RunListSimulation(
                         TaskCount, WorkDurationMs, ThreadCount,
                         StatusText, ExpectedSequentialMs, ElapsedMs, Speedup, ChunkDetails);
@@ -167,6 +174,7 @@ page 99100 "PW Demo"
                 trigger OnAction()
                 begin
                     ClearOutput();
+                    SampleRunner.SetSessionTimeout(SessionTimeoutMs);
                     SampleRunner.RunRecordCount(
                         TableNo, ThreadCount,
                         StatusText, ElapsedMs, ChunkDetails);
@@ -183,6 +191,7 @@ page 99100 "PW Demo"
                     TableNos: List of [Integer];
                 begin
                     ClearOutput();
+                    SampleRunner.SetSessionTimeout(SessionTimeoutMs);
                     SampleRunner.ParseTableNos(TableNosText, TableNos);
                     SampleRunner.RunMultiTableCount(
                         TableNos,
@@ -245,6 +254,7 @@ page 99100 "PW Demo"
         TaskCount: Integer;
         WorkDurationMs: Integer;
         ThreadCount: Integer;
+        SessionTimeoutMs: Integer;
         TableNo: Integer;
         TableNosText: Text;
         StatusText: Text;
@@ -260,6 +270,7 @@ page 99100 "PW Demo"
         TaskCount := 20;
         WorkDurationMs := 200;
         ThreadCount := 4;
+        SessionTimeoutMs := 60000;
         TableNo := 17;
         TableNosText := '8,9,18,17,27';
     end;

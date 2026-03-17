@@ -478,6 +478,16 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Settings - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 3467738333 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Max runtime per background session. Platform kills the session if exceeded. 0 = no limit.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control SessionTimeoutMs - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 3467738333 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Session Timeout (ms)</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control SessionTimeoutMs - Property Caption</note>
+        </trans-unit>
         <trans-unit id="Page 3985274024 - Control 472640727 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Number of parallel threads to use.</source>
           <note from="Developer" annotates="general" priority="2"></note>

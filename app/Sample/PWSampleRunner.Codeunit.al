@@ -9,6 +9,7 @@ codeunit 99102 "PW Sample Runner"
     Access = Internal;
 
     var
+        RunnerSessionTimeoutMs: Integer;
         TableNoRecordsLbl: Label 'Table %1 has no records.', Comment = '%1 = table number';
         CompletedRecordsLbl: Label 'Completed — %1 records across %2 chunks', Comment = '%1 = total record count, %2 = chunk count';
         CompletedTablesLbl: Label 'Completed — %1 tables counted in parallel', Comment = '%1 = number of tables';
@@ -18,6 +19,11 @@ codeunit 99102 "PW Sample Runner"
         RecordCountLbl: Label '%1 records', Comment = '%1 = number of records';
         TotalCountedLbl: Label 'Total counted: %1', Comment = '%1 = total record count';
         TableRecordCountLbl: Label ': %1 records', Comment = '%1 = record count';
+
+    procedure SetSessionTimeout(Milliseconds: Integer)
+    begin
+        RunnerSessionTimeoutMs := Milliseconds;
+    end;
 
     #region RunForList — automatic list splitting
 
@@ -48,6 +54,7 @@ codeunit 99102 "PW Sample Runner"
         BatchId := Coordinator
             .SetThreads(ThreadCount)
             .SetBatchTimeout(300)
+            .SetSessionTimeout(RunnerSessionTimeoutMs)
             .RunForList("PW Worker Type"::Sample, Items, Payload);
 
         if IsNullGuid(BatchId) then begin
@@ -101,6 +108,7 @@ codeunit 99102 "PW Sample Runner"
         BatchId := Coordinator
             .SetThreads(ThreadCount)
             .SetBatchTimeout(300)
+            .SetSessionTimeout(RunnerSessionTimeoutMs)
             .RunForRecords("PW Worker Type"::RecordCounter, RecRef, Payload);
 
         if IsNullGuid(BatchId) then begin
@@ -156,6 +164,7 @@ codeunit 99102 "PW Sample Runner"
         StartTime := CurrentDateTime();
         BatchId := Coordinator
             .SetBatchTimeout(300)
+            .SetSessionTimeout(RunnerSessionTimeoutMs)
             .RunForChunks("PW Worker Type"::TableCounter, Chunks);
 
         if IsNullGuid(BatchId) then begin
