@@ -47,6 +47,7 @@ codeunit 99002 "PW Task Dispatcher"
             ErrorText := GetLastErrorText();
             ErrorCallStack := GetLastErrorCallStack();
             Rec."Error Message" := CopyStr(ErrorText, 1, MaxStrLen(Rec."Error Message"));
+            WriteFullErrorMessage(Rec, ErrorText);
             WriteErrorCallStack(Rec, ErrorCallStack);
             Rec.Status := "PW Chunk Status"::Failed;
             Rec."Completed At" := CurrentDateTime();
@@ -56,6 +57,14 @@ codeunit 99002 "PW Task Dispatcher"
         end;
 
         UpdateBatchCounters(Rec."Batch Id");
+    end;
+
+    local procedure WriteFullErrorMessage(var Chunk: Record "PW Batch Chunk"; ErrorText: Text)
+    var
+        OutStream: OutStream;
+    begin
+        Chunk."Full Error Message".CreateOutStream(OutStream, TextEncoding::UTF8);
+        OutStream.WriteText(ErrorText);
     end;
 
     local procedure WriteErrorCallStack(var Chunk: Record "PW Batch Chunk"; CallStack: Text)

@@ -52,12 +52,41 @@ page 99001 "PW Batch Chunk List"
     {
         area(Promoted)
         {
+            actionref(ViewFullErrorRef; ViewFullError) { }
             actionref(ViewErrorCallStackRef; ViewErrorCallStack) { }
             actionref(ViewInputPayloadRef; ViewInputPayload) { }
             actionref(ViewResultPayloadRef; ViewResultPayload) { }
         }
         area(Processing)
         {
+            action(ViewFullError)
+            {
+                Caption = 'View Full Error';
+                ToolTip = 'Show the full error message for this chunk (not truncated).';
+                Image = PrevErrorMessage;
+
+                trigger OnAction()
+                var
+                    InStream: InStream;
+                    TextBuilder: TextBuilder;
+                    Line: Text;
+                begin
+                    Rec.CalcFields("Full Error Message");
+                    if not Rec."Full Error Message".HasValue() then begin
+                        if Rec."Error Message" <> '' then
+                            Message(Rec."Error Message")
+                        else
+                            Message('No error message available.');
+                        exit;
+                    end;
+                    Rec."Full Error Message".CreateInStream(InStream, TextEncoding::UTF8);
+                    while not InStream.EOS() do begin
+                        InStream.ReadText(Line);
+                        TextBuilder.AppendLine(Line);
+                    end;
+                    Message(TextBuilder.ToText());
+                end;
+            }
             action(ViewErrorCallStack)
             {
                 Caption = 'View Error Call Stack';

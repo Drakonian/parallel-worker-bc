@@ -358,20 +358,29 @@ codeunit 99000 "PW Batch Coordinator"
 
     /// <summary>
     /// Collects error messages from all failed chunks in the batch.
+    /// Reads the full error from the Blob field when available, falls back to the Text[2048] field.
     /// </summary>
     /// <param name="BatchId">The batch identifier.</param>
     /// <param name="Errors">The list that will be populated with error messages from failed chunks.</param>
     procedure GetErrors(BatchId: Guid; var Errors: List of [Text])
     var
         Chunk: Record "PW Batch Chunk";
+        InStream: InStream;
+        FullError: Text;
     begin
         Clear(Errors);
+        Chunk.SetAutoCalcFields("Full Error Message");
         Chunk.SetRange("Batch Id", BatchId);
         Chunk.SetRange(Status, "PW Chunk Status"::Failed);
         if Chunk.FindSet() then
             repeat
-                if Chunk."Error Message" <> '' then
-                    Errors.Add(Chunk."Error Message");
+                if Chunk."Full Error Message".HasValue() then begin
+                    Chunk."Full Error Message".CreateInStream(InStream, TextEncoding::UTF8);
+                    InStream.ReadText(FullError);
+                    Errors.Add(FullError);
+                end else
+                    if Chunk."Error Message" <> '' then
+                        Errors.Add(Chunk."Error Message");
             until Chunk.Next() = 0;
     end;
 
@@ -534,6 +543,14 @@ codeunit 99000 "PW Batch Coordinator"
         exit(0);
     end;
 
+    local procedure WriteFullErrorToChunk(var Chunk: Record "PW Batch Chunk"; ErrorText: Text)
+    var
+        OutStream: OutStream;
+    begin
+        Chunk."Full Error Message".CreateOutStream(OutStream, TextEncoding::UTF8);
+        OutStream.WriteText(ErrorText);
+    end;
+
     local procedure ShouldCheckDeadSessions(StartTime: DateTime): Boolean
     begin
         if SessionTimeoutMs <= 0 then
@@ -557,6 +574,7 @@ codeunit 99000 "PW Batch Coordinator"
             repeat
                 if not Session.IsSessionActive(Chunk."Session Id") then begin
                     Chunk."Error Message" := CopyStr(SessionTerminatedErr, 1, MaxStrLen(Chunk."Error Message"));
+                    WriteFullErrorToChunk(Chunk, SessionTerminatedErr);
                     Chunk.Status := "PW Chunk Status"::Failed;
                     Chunk."Completed At" := CurrentDateTime();
                     Chunk.Modify();
@@ -655,6 +673,7 @@ codeunit 99000 "PW Batch Coordinator"
             repeat
                 if not StartSession(SessionId, Codeunit::"PW Task Dispatcher", Batch."Company Name", Chunk, GetEffectiveSessionTimeout()) then begin
                     Chunk."Error Message" := CopyStr(GetLastErrorText(), 1, MaxStrLen(Chunk."Error Message"));
+                    WriteFullErrorToChunk(Chunk, GetLastErrorText());
                     Chunk.Status := "PW Chunk Status"::Failed;
                     Chunk."Completed At" := CurrentDateTime();
                     Chunk.Modify();

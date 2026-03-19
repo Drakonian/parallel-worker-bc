@@ -11,14 +11,14 @@ page 99100 "PW Demo"
     {
         area(Content)
         {
-            group(ListSimulation)
+            group(Input)
             {
-                Caption = 'List Simulation (RunForList)';
+                Caption = 'Input';
 
                 field(TaskCount; TaskCount)
                 {
                     Caption = 'Task Count';
-                    ToolTip = 'Number of work items to process.';
+                    ToolTip = 'Number of work items. Used by Run Simulation and Non-Blocking demos.';
                     MinValue = 1;
                 }
                 field(WorkDurationMs; WorkDurationMs)
@@ -27,43 +27,28 @@ page 99100 "PW Demo"
                     ToolTip = 'Simulated work time per item in milliseconds.';
                     MinValue = 50;
                 }
-            }
-            group(RecordCountGroup)
-            {
-                Caption = 'Record Count (RunForRecords)';
-
                 field(TableNo; TableNo)
                 {
                     Caption = 'Table No.';
-                    ToolTip = 'Table to count records from in parallel.';
+                    ToolTip = 'Table to count records from. Used by Run Record Count.';
                     MinValue = 1;
                 }
-            }
-            group(MultiTableGroup)
-            {
-                Caption = 'Multi-Table Count (RunForChunks)';
-
                 field(TableNosText; TableNosText)
                 {
                     Caption = 'Table Numbers';
-                    ToolTip = 'Comma-separated table numbers to count in parallel (e.g. 8,9,18,27).';
+                    ToolTip = 'Comma-separated table numbers. Used by Run Multi-Table Count.';
                 }
-            }
-            group(Settings)
-            {
-                Caption = 'Settings';
-
                 field(ThreadCount; ThreadCount)
                 {
                     Caption = 'Thread Count';
-                    ToolTip = 'Number of parallel threads to use.';
+                    ToolTip = 'Number of parallel background sessions.';
                     MinValue = 1;
                     MaxValue = 10;
                 }
                 field(SessionTimeoutMs; SessionTimeoutMs)
                 {
                     Caption = 'Session Timeout (ms)';
-                    ToolTip = 'Max runtime per background session. Platform kills the session if exceeded. 0 = no limit.';
+                    ToolTip = 'Max runtime per session. Platform kills the session if exceeded. 0 = no limit.';
                     MinValue = 0;
                 }
             }
@@ -96,25 +81,20 @@ page 99100 "PW Demo"
                     Editable = false;
                     DecimalPlaces = 1 : 1;
                 }
-            }
-            group(NonBlocking)
-            {
-                Caption = 'Non-Blocking (fire-and-forget)';
-
                 field(BatchIdText; BatchIdText)
                 {
                     Caption = 'Batch ID';
-                    ToolTip = 'The ID of the running batch. Stored for later polling.';
+                    ToolTip = 'Non-blocking: the running batch ID.';
                     Editable = false;
                 }
                 field(ProgressText; ProgressText)
                 {
                     Caption = 'Progress';
-                    ToolTip = 'Current progress — click Refresh to update.';
+                    ToolTip = 'Non-blocking: click Refresh to update.';
                     Editable = false;
                 }
             }
-            group(ChunkResults)
+            group(Details)
             {
                 Caption = 'Chunk Details';
 
@@ -153,7 +133,7 @@ page 99100 "PW Demo"
             action(RunSimulation)
             {
                 Caption = 'Run Simulation';
-                ToolTip = 'Run the parallel list simulation (RunForList pattern).';
+                ToolTip = 'RunForList pattern: split items, simulate work, measure speedup.';
                 Image = Start;
 
                 trigger OnAction()
@@ -168,7 +148,7 @@ page 99100 "PW Demo"
             action(RunRecordCount)
             {
                 Caption = 'Run Record Count';
-                ToolTip = 'Count records in a table using parallel sessions (RunForRecords pattern).';
+                ToolTip = 'RunForRecords pattern: split table records, count per chunk.';
                 Image = Calculate;
 
                 trigger OnAction()
@@ -183,7 +163,7 @@ page 99100 "PW Demo"
             action(RunMultiTable)
             {
                 Caption = 'Run Multi-Table Count';
-                ToolTip = 'Count records in multiple tables simultaneously (RunForChunks pattern).';
+                ToolTip = 'RunForChunks pattern: one chunk per table, count each in parallel.';
                 Image = Splitlines;
 
                 trigger OnAction()
@@ -201,7 +181,7 @@ page 99100 "PW Demo"
             action(StartNonBlocking)
             {
                 Caption = '1. Start';
-                ToolTip = 'Start a slow batch and return immediately — no waiting.';
+                ToolTip = 'Fire-and-forget: start batch, return immediately.';
                 Image = Start;
 
                 trigger OnAction()
@@ -222,7 +202,7 @@ page 99100 "PW Demo"
             action(RefreshProgress)
             {
                 Caption = '2. Refresh';
-                ToolTip = 'Poll the batch status without blocking.';
+                ToolTip = 'Poll batch status without blocking.';
                 Image = Refresh;
 
                 trigger OnAction()
@@ -233,7 +213,7 @@ page 99100 "PW Demo"
             action(CollectAndCleanup)
             {
                 Caption = '3. Collect';
-                ToolTip = 'Collect results (if finished) and delete the batch records.';
+                ToolTip = 'Collect results (if finished) and delete batch records.';
                 Image = GetLines;
 
                 trigger OnAction()

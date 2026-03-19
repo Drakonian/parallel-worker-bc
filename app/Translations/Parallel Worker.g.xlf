@@ -88,6 +88,11 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Table PW Batch Chunk - Field Error Message - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Table 4076146500 - Field 356883188 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Full Error Message</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Table PW Batch Chunk - Field Full Error Message - Property Caption</note>
+        </trans-unit>
         <trans-unit id="Table 4076146500 - Field 3735423932 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Input Payload</source>
           <note from="Developer" annotates="general" priority="2"></note>
@@ -233,6 +238,16 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - Action ViewErrorCallStack - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Page 3753346518 - Action 2676550538 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Show the full error message for this chunk (not truncated).</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - Action ViewFullError - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3753346518 - Action 2676550538 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>View Full Error</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - Action ViewFullError - Property Caption</note>
+        </trans-unit>
         <trans-unit id="Page 3753346518 - Action 2329531511 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Show the JSON input payload for this chunk.</source>
           <note from="Developer" annotates="general" priority="2"></note>
@@ -333,10 +348,10 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Property Caption</note>
         </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 509879843 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+        <trans-unit id="Page 3985274024 - Control 318613646 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
           <source>Chunk Details</source>
           <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ChunkResults - Property Caption</note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Details - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Control 3184684107 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Per-chunk processing details.</source>
@@ -348,13 +363,43 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ChunkDetails - Property Caption</note>
         </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 1450169835 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>List Simulation (RunForList)</source>
+        <trans-unit id="Page 3985274024 - Control 3567459362 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Input</source>
           <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ListSimulation - Property Caption</note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Input - Property Caption</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 3467738333 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Max runtime per session. Platform kills the session if exceeded. 0 = no limit.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control SessionTimeoutMs - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 3467738333 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Session Timeout (ms)</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control SessionTimeoutMs - Property Caption</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 103915345 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Table to count records from. Used by Run Record Count.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNo - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 103915345 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Table No.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNo - Property Caption</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 497444843 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Comma-separated table numbers. Used by Run Multi-Table Count.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNosText - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 497444843 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Table Numbers</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNosText - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Control 2482384458 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Number of work items to process.</source>
+          <source>Number of work items. Used by Run Simulation and Non-Blocking demos.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TaskCount - Property ToolTip</note>
         </trans-unit>
@@ -362,6 +407,16 @@
           <source>Task Count</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TaskCount - Property Caption</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 472640727 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Number of parallel background sessions.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ThreadCount - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 472640727 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Thread Count</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ThreadCount - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Control 3750994371 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Simulated work time per item in milliseconds.</source>
@@ -373,28 +428,13 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control WorkDurationMs - Property Caption</note>
         </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 3456246892 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Multi-Table Count (RunForChunks)</source>
+        <trans-unit id="Page 3985274024 - Control 3961040049 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Results</source>
           <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control MultiTableGroup - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 497444843 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Comma-separated table numbers to count in parallel (e.g. 8,9,18,27).</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNosText - Property ToolTip</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 497444843 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Table Numbers</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNosText - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 203827202 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Non-Blocking (fire-and-forget)</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control NonBlocking - Property Caption</note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Output - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Control 2916501080 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>The ID of the running batch. Stored for later polling.</source>
+          <source>Non-blocking: the running batch ID.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control BatchIdText - Property ToolTip</note>
         </trans-unit>
@@ -402,21 +442,6 @@
           <source>Batch ID</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control BatchIdText - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 2724499124 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Current progress — click Refresh to update.</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ProgressText - Property ToolTip</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 2724499124 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Progress</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ProgressText - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 3961040049 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Results</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Output - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Control 3114684376 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>How long the parallel execution actually took.</source>
@@ -438,6 +463,16 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ExpectedSequentialMs - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 2724499124 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Non-blocking: click Refresh to update.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ProgressText - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 2724499124 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Progress</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ProgressText - Property Caption</note>
+        </trans-unit>
         <trans-unit id="Page 3985274024 - Control 1512740014 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Expected sequential time divided by actual parallel time.</source>
           <note from="Developer" annotates="general" priority="2"></note>
@@ -458,48 +493,8 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control StatusText - Property Caption</note>
         </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 2539360843 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Record Count (RunForRecords)</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control RecordCountGroup - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 103915345 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Table to count records from in parallel.</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNo - Property ToolTip</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 103915345 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Table No.</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control TableNo - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 698539839 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Settings</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Settings - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 3467738333 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Max runtime per background session. Platform kills the session if exceeded. 0 = no limit.</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control SessionTimeoutMs - Property ToolTip</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 3467738333 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Session Timeout (ms)</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control SessionTimeoutMs - Property Caption</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 472640727 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Number of parallel threads to use.</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ThreadCount - Property ToolTip</note>
-        </trans-unit>
-        <trans-unit id="Page 3985274024 - Control 472640727 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Thread Count</source>
-          <note from="Developer" annotates="general" priority="2"></note>
-          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control ThreadCount - Property Caption</note>
-        </trans-unit>
         <trans-unit id="Page 3985274024 - Action 4171595991 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Collect results (if finished) and delete the batch records.</source>
+          <source>Collect results (if finished) and delete batch records.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action CollectAndCleanup - Property ToolTip</note>
         </trans-unit>
@@ -509,7 +504,7 @@
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action CollectAndCleanup - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Action 1321243612 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Poll the batch status without blocking.</source>
+          <source>Poll batch status without blocking.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RefreshProgress - Property ToolTip</note>
         </trans-unit>
@@ -519,7 +514,7 @@
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RefreshProgress - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Action 2699563570 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Count records in multiple tables simultaneously (RunForChunks pattern).</source>
+          <source>RunForChunks pattern: one chunk per table, count each in parallel.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RunMultiTable - Property ToolTip</note>
         </trans-unit>
@@ -529,7 +524,7 @@
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RunMultiTable - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Action 909301361 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Count records in a table using parallel sessions (RunForRecords pattern).</source>
+          <source>RunForRecords pattern: split table records, count per chunk.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RunRecordCount - Property ToolTip</note>
         </trans-unit>
@@ -539,7 +534,7 @@
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RunRecordCount - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Action 3182984678 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Run the parallel list simulation (RunForList pattern).</source>
+          <source>RunForList pattern: split items, simulate work, measure speedup.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RunSimulation - Property ToolTip</note>
         </trans-unit>
@@ -549,7 +544,7 @@
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action RunSimulation - Property Caption</note>
         </trans-unit>
         <trans-unit id="Page 3985274024 - Action 1949166250 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
-          <source>Start a slow batch and return immediately — no waiting.</source>
+          <source>Fire-and-forget: start batch, return immediately.</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Action StartNonBlocking - Property ToolTip</note>
         </trans-unit>

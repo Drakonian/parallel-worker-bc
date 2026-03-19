@@ -39,6 +39,11 @@ table 99001 "PW Batch Chunk"
             Caption = 'Error Message';
             DataClassification = SystemMetadata;
         }
+        field(11; "Full Error Message"; Blob)
+        {
+            Caption = 'Full Error Message';
+            DataClassification = SystemMetadata;
+        }
         field(7; "Error Call Stack"; Blob)
         {
             Caption = 'Error Call Stack';

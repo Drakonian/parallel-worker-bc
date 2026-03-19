@@ -10,18 +10,25 @@ Business Central AL is single-threaded by design. When you need to process thous
 
 ### When to use it
 
-| Scenario | Benefit |
-|---|---|
-| Bulk external API calls (e.g., posting 500 invoices to an external system) | N calls run concurrently instead of sequentially |
-| Heavy calculations across many records (CalcFields, complex validations) | CPU-bound work split across sessions |
-| Data migration / transformation on large tables | Throughput scales with thread count |
-| Report data preparation | Parallel aggregation of independent datasets |
+The library splits work into **chunks across N threads** (e.g., 500 items with 4 threads = 4 chunks of ~125 items). Each chunk processes its items sequentially, the speedup comes from running chunks concurrently.
+
+| Scenario | Why it works | What a chunk does |
+|---|---|---|
+| Calling external REST APIs (tax calculation, address validation, ERP sync) | Network latency dominates — N threads make N concurrent HTTP call streams | Iterates its ~125 items, calling the API sequentially within the chunk |
+| Heavy per-record computation (complex pricing, BOM explosion, cost rollup) | CPU-bound work split across multiple concurrent sessions | Processes its slice of records |
+| Data validation across large datasets (dimensions, credit limits, inventory) | Read-heavy, no writes, fully independent | Validates its slice, collects errors into results |
+| Sending emails or notifications | I/O-bound (SMTP/HTTP) — parallelizes naturally | Sends its batch of emails |
+| Data export/transformation (build JSON/XML for integration) | CPU + I/O, no shared state | Transforms its record range |
 
 ### When NOT to use it
 
-- **Simple CRUD on small datasets** — overhead of creating sessions outweighs the gain
-- **Operations that must be strictly ordered** — chunks run in parallel with no ordering guarantee
-- **Work that requires shared mutable state** — each session is isolated; there's no shared memory
+| Anti-pattern | Why it fails |
+|---|---|
+| Posting documents (Sales Orders, Purchase Orders, Journals) | Each posting touches shared ledgers, number series, and running totals — chunks deadlock on the same rows |
+| Operations using Number Series with Gaps Allowed = false | BC locks the Number Series Line record to guarantee sequential numbers — concurrent sessions serialize on that lock |
+| Updating running totals or aggregate fields | Inherently serial — each update depends on the previous value |
+| Small datasets | Session startup overhead exceeds the time saved by parallelism |
+| Work where items depend on each other's results | No ordering guarantee across chunks, no cross-chunk communication |
 
 ## Quick Start
 
