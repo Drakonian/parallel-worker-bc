@@ -76,7 +76,7 @@ page 99001 "PW Batch Chunk List"
                         if Rec."Error Message" <> '' then
                             Message(Rec."Error Message")
                         else
-                            Message('No error message available.');
+                            Message(NoErrorMsgLbl);
                         exit;
                     end;
                     Rec."Full Error Message".CreateInStream(InStream, TextEncoding::UTF8);
@@ -101,7 +101,7 @@ page 99001 "PW Batch Chunk List"
                 begin
                     Rec.CalcFields("Error Call Stack");
                     if not Rec."Error Call Stack".HasValue() then begin
-                        Message('No error call stack available.');
+                        Message(NoCallStackLbl);
                         exit;
                     end;
                     Rec."Error Call Stack".CreateInStream(InStream, TextEncoding::UTF8);
@@ -126,7 +126,7 @@ page 99001 "PW Batch Chunk List"
                 begin
                     Rec.CalcFields("Input Payload");
                     if not Rec."Input Payload".HasValue() then begin
-                        Message('No input payload available.');
+                        Message(NoInputPayloadLbl);
                         exit;
                     end;
                     Rec."Input Payload".CreateInStream(InStream, TextEncoding::UTF8);
@@ -149,7 +149,7 @@ page 99001 "PW Batch Chunk List"
                 begin
                     Rec.CalcFields("Result Payload");
                     if not Rec."Result Payload".HasValue() then begin
-                        Message('No result payload available.');
+                        Message(NoResultPayloadLbl);
                         exit;
                     end;
                     Rec."Result Payload".CreateInStream(InStream, TextEncoding::UTF8);
@@ -160,4 +160,10 @@ page 99001 "PW Batch Chunk List"
             }
         }
     }
+
+    var
+        NoErrorMsgLbl: Label 'No error message available.';
+        NoCallStackLbl: Label 'No error call stack available.';
+        NoInputPayloadLbl: Label 'No input payload available.';
+        NoResultPayloadLbl: Label 'No result payload available.';
 }

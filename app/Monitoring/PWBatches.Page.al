@@ -78,7 +78,7 @@ page 99000 "PW Batches"
                 var
                     Coordinator: Codeunit "PW Batch Coordinator";
                 begin
-                    if not Confirm('Delete batch %1 and all its chunks?', false, Rec.Id) then
+                    if not Confirm(DeleteBatchQst, false, Rec.Id) then
                         exit;
                     Coordinator.Cleanup(Rec.Id);
                     CurrPage.Update(false);
@@ -94,7 +94,7 @@ page 99000 "PW Batches"
                 var
                     BatchCleanup: Codeunit "PW Batch Cleanup";
                 begin
-                    if not Confirm('Delete all finished batches older than 24 hours?') then
+                    if not Confirm(DeleteOlderQst) then
                         exit;
                     BatchCleanup.CleanupOlderThan(24);
                     CurrPage.Update(false);
@@ -102,4 +102,7 @@ page 99000 "PW Batches"
             }
         }
     }
+    var
+        DeleteBatchQst: Label 'Delete batch %1 and all its chunks?', Comment = '%1 = batch ID';
+        DeleteOlderQst: Label 'Delete all finished batches older than 24 hours?';
 }

@@ -193,6 +193,26 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Page 3753346518 - NamedType 1282665969" size-unit="char" translate="yes" xml:space="preserve">
+          <source>No error call stack available.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - NamedType NoCallStackLbl</note>
+        </trans-unit>
+        <trans-unit id="Page 3753346518 - NamedType 1972851774" size-unit="char" translate="yes" xml:space="preserve">
+          <source>No error message available.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - NamedType NoErrorMsgLbl</note>
+        </trans-unit>
+        <trans-unit id="Page 3753346518 - NamedType 2342418573" size-unit="char" translate="yes" xml:space="preserve">
+          <source>No input payload available.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - NamedType NoInputPayloadLbl</note>
+        </trans-unit>
+        <trans-unit id="Page 3753346518 - NamedType 2885854696" size-unit="char" translate="yes" xml:space="preserve">
+          <source>No result payload available.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batch Chunk List - NamedType NoResultPayloadLbl</note>
+        </trans-unit>
         <trans-unit id="Page 3753346518 - Control 274452355 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Batch this chunk belongs to.</source>
           <note from="Developer" annotates="general" priority="2"></note>
@@ -272,6 +292,16 @@
           <source>PW Batches</source>
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Batches - Property Caption</note>
+        </trans-unit>
+        <trans-unit id="Page 891222631 - NamedType 2455538901" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Delete batch %1 and all its chunks?</source>
+          <note from="Developer" annotates="general" priority="2">%1 = batch ID</note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batches - NamedType DeleteBatchQst</note>
+        </trans-unit>
+        <trans-unit id="Page 891222631 - NamedType 446605585" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Delete all finished batches older than 24 hours?</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Batches - NamedType DeleteOlderQst</note>
         </trans-unit>
         <trans-unit id="Page 891222631 - Control 1540107796 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>When the last chunk finished.</source>
