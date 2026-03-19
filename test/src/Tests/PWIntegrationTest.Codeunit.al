@@ -980,6 +980,194 @@ codeunit 99209 "PW Integration Test"
 
     #endregion
 
+    #region Payload-less overloads
+
+    [Test]
+    procedure RunForListWithoutPayload()
+    // [SCENARIO 12.1] RunForList without payload overload works the same as with empty payload
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Results: List of [JsonObject];
+        BatchId: Guid;
+        ResultObj: JsonObject;
+        Token: JsonToken;
+        TotalItems: Integer;
+        i: Integer;
+    begin
+        for i := 1 to 4 do
+            Items.Add(StrSubstNo('Item-%1', i));
+
+        BatchId := Coordinator
+            .SetThreads(2)
+            .SetBatchTimeout(30)
+            .RunForList("PW Worker Type"::TestWorker, Items);
+
+        LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
+        Coordinator.GetResults(BatchId, Results);
+
+        TotalItems := 0;
+        for i := 1 to Results.Count() do begin
+            ResultObj := Results.Get(i);
+            ResultObj.Get('ItemCount', Token);
+            TotalItems += Token.AsValue().AsInteger();
+        end;
+        LibraryAssert.AreEqual(4, TotalItems, 'All items should be processed');
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure RunForRecordsWithoutPayload()
+    // [SCENARIO 12.2] RunForRecords without payload overload works correctly
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        TestBatch: Record "PW Batch";
+        RecRef: RecordRef;
+        Results: List of [JsonObject];
+        BatchId: Guid;
+        ResultObj: JsonObject;
+        Token: JsonToken;
+        ActualTotal: Integer;
+        i: Integer;
+    begin
+        TestBatch.SetRange("Company Name", 'PW_TEST_NOPAY');
+        TestBatch.DeleteAll();
+
+        for i := 1 to 3 do begin
+            Clear(TestBatch);
+            TestBatch.Id := CreateGuid();
+            TestBatch.Status := "PW Batch Status"::Pending;
+            TestBatch."Company Name" := 'PW_TEST_NOPAY';
+            TestBatch.Insert();
+        end;
+        Commit();
+
+        TestBatch.Reset();
+        TestBatch.SetRange("Company Name", 'PW_TEST_NOPAY');
+        RecRef.GetTable(TestBatch);
+
+        BatchId := Coordinator
+            .SetThreads(2)
+            .SetBatchTimeout(30)
+            .RunForRecords("PW Worker Type"::TestRecordWorker, RecRef);
+
+        LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Batch should complete');
+        Coordinator.GetResults(BatchId, Results);
+
+        ActualTotal := 0;
+        for i := 1 to Results.Count() do begin
+            ResultObj := Results.Get(i);
+            ResultObj.Get('RecordCount', Token);
+            ActualTotal += Token.AsValue().AsInteger();
+        end;
+        LibraryAssert.AreEqual(3, ActualTotal, 'Total records should match');
+
+        Coordinator.Cleanup(BatchId);
+        TestBatch.Reset();
+        TestBatch.SetRange("Company Name", 'PW_TEST_NOPAY');
+        TestBatch.DeleteAll();
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitForListWithoutPayload()
+    // [SCENARIO 12.3] RunAndWaitForList without payload returns true and collects results
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Results: List of [JsonObject];
+        ResultObj: JsonObject;
+        Token: JsonToken;
+        TotalItems: Integer;
+        i: Integer;
+    begin
+        for i := 1 to 6 do
+            Items.Add(StrSubstNo('Item-%1', i));
+
+        LibraryAssert.IsTrue(
+            Coordinator.SetThreads(2).SetBatchTimeout(30).RunAndWaitForList(
+                "PW Worker Type"::TestWorker, Items, Results),
+            'RunAndWaitForList without payload should return true');
+
+        TotalItems := 0;
+        for i := 1 to Results.Count() do begin
+            ResultObj := Results.Get(i);
+            ResultObj.Get('ItemCount', Token);
+            TotalItems += Token.AsValue().AsInteger();
+        end;
+        LibraryAssert.AreEqual(6, TotalItems, 'All items should be processed');
+
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitForListWithoutPayloadEmptyList()
+    // [SCENARIO 12.4] RunAndWaitForList without payload with empty list returns true
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Results: List of [JsonObject];
+    begin
+        LibraryAssert.IsTrue(
+            Coordinator.RunAndWaitForList(
+                "PW Worker Type"::TestWorker, Items, Results),
+            'Empty list should return true');
+
+        LibraryAssert.AreEqual(0, Results.Count(), 'Results should be empty');
+    end;
+
+    [Test]
+    procedure RunAndWaitForRecordsWithoutPayload()
+    // [SCENARIO 12.5] RunAndWaitForRecords without payload returns true and counts match
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        TestBatch: Record "PW Batch";
+        RecRef: RecordRef;
+        Results: List of [JsonObject];
+        ResultObj: JsonObject;
+        Token: JsonToken;
+        ActualTotal: Integer;
+        i: Integer;
+    begin
+        TestBatch.SetRange("Company Name", 'PW_TEST_RAW_NP');
+        TestBatch.DeleteAll();
+
+        for i := 1 to 4 do begin
+            Clear(TestBatch);
+            TestBatch.Id := CreateGuid();
+            TestBatch.Status := "PW Batch Status"::Pending;
+            TestBatch."Company Name" := 'PW_TEST_RAW_NP';
+            TestBatch.Insert();
+        end;
+        Commit();
+
+        TestBatch.Reset();
+        TestBatch.SetRange("Company Name", 'PW_TEST_RAW_NP');
+        RecRef.GetTable(TestBatch);
+
+        LibraryAssert.IsTrue(
+            Coordinator.SetThreads(2).SetBatchTimeout(30).RunAndWaitForRecords(
+                "PW Worker Type"::TestRecordWorker, RecRef, Results),
+            'RunAndWaitForRecords without payload should return true');
+
+        ActualTotal := 0;
+        for i := 1 to Results.Count() do begin
+            ResultObj := Results.Get(i);
+            ResultObj.Get('RecordCount', Token);
+            ActualTotal += Token.AsValue().AsInteger();
+        end;
+        LibraryAssert.AreEqual(4, ActualTotal, 'Total records should match');
+
+        TestBatch.Reset();
+        TestBatch.SetRange("Company Name", 'PW_TEST_RAW_NP');
+        TestBatch.DeleteAll();
+        Commit();
+    end;
+
+    #endregion
+
     #region Session timeout
 
     [Test]

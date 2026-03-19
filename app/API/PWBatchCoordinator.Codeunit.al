@@ -69,6 +69,20 @@ codeunit 99000 "PW Batch Coordinator"
     /// </summary>
     /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
     /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
+    /// <returns>The batch ID that can be used to track progress and retrieve results.</returns>
+    /// <remarks>Commits the current transaction before starting background sessions. Must not be called inside a write transaction.</remarks>
+    procedure RunForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef): Guid
+    var
+        EmptyPayload: JsonObject;
+    begin
+        exit(RunForRecords(WorkerType, RecRef, EmptyPayload));
+    end;
+
+    /// <summary>
+    /// Splits a filtered record set into chunks and executes the worker in parallel background sessions.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
     /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
     /// <returns>The batch ID that can be used to track progress and retrieve results.</returns>
     /// <remarks>Commits the current transaction before starting background sessions. Must not be called inside a write transaction.</remarks>
@@ -129,6 +143,20 @@ codeunit 99000 "PW Batch Coordinator"
         Commit();
         StartBatch(BatchId);
         exit(BatchId);
+    end;
+
+    /// <summary>
+    /// Splits a list of text values into chunks and executes the worker in parallel background sessions.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="Items">The list of text items to distribute across chunks.</param>
+    /// <returns>The batch ID that can be used to track progress and retrieve results.</returns>
+    /// <remarks>Commits the current transaction before starting background sessions. Must not be called inside a write transaction.</remarks>
+    procedure RunForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]): Guid
+    var
+        EmptyPayload: JsonObject;
+    begin
+        exit(RunForList(WorkerType, Items, EmptyPayload));
     end;
 
     /// <summary>
@@ -416,6 +444,21 @@ codeunit 99000 "PW Batch Coordinator"
     /// </summary>
     /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
     /// <param name="Items">The list of text items to distribute across chunks.</param>
+    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
+    procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; var Results: List of [JsonObject]): Boolean
+    var
+        EmptyPayload: JsonObject;
+    begin
+        exit(RunAndWaitForList(WorkerType, Items, EmptyPayload, Results));
+    end;
+
+    /// <summary>
+    /// Convenience method: runs a list of items in parallel, waits for completion,
+    /// collects results, and cleans up — all in one call.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="Items">The list of text items to distribute across chunks.</param>
     /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
     /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
     /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
@@ -438,6 +481,21 @@ codeunit 99000 "PW Batch Coordinator"
 
         Cleanup(BatchId);
         exit(Success);
+    end;
+
+    /// <summary>
+    /// Convenience method: splits a filtered record set across threads, waits for completion,
+    /// collects results, and cleans up — all in one call.
+    /// </summary>
+    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
+    /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
+    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
+    procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; var Results: List of [JsonObject]): Boolean
+    var
+        EmptyPayload: JsonObject;
+    begin
+        exit(RunAndWaitForRecords(WorkerType, RecRef, EmptyPayload, Results));
     end;
 
     /// <summary>

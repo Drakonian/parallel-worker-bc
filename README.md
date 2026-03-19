@@ -84,7 +84,6 @@ var
     Coordinator: Codeunit "PW Batch Coordinator";
     Items: List of [Text];
     Results: List of [JsonObject];
-    Payload: JsonObject;
 begin
     // Build your work items
     Items.Add('INV-001');
@@ -93,7 +92,7 @@ begin
 
     // One call: run in parallel, wait, collect results, clean up
     if Coordinator.SetThreads(4).SetBatchTimeout(120).RunAndWaitForList(
-        "PW Worker Type"::InvoicePoster, Items, Payload, Results)
+        "PW Worker Type"::InvoicePoster, Items, Results)
     then
         // All chunks succeeded — process Results
     else
@@ -216,7 +215,7 @@ end;
 // Caller
 RecRef.Open(Database::"G/L Entry");
 RecRef.SetFilter("Posting Date", '%1..%2', StartDate, EndDate);
-BatchId := Coordinator.SetThreads(4).RunForRecords(WorkerType, RecRef, Payload);
+BatchId := Coordinator.SetThreads(4).RunForRecords(WorkerType, RecRef);
 ```
 
 ### RunForList — automatic list splitting
@@ -243,7 +242,7 @@ Items.Add('DOC-001');
 Items.Add('DOC-002');
 Items.Add('DOC-003');
 // ...
-BatchId := Coordinator.SetThreads(4).RunForList(WorkerType, Items, Payload);
+BatchId := Coordinator.SetThreads(4).RunForList(WorkerType, Items);
 ```
 
 ### RunForChunks — full manual control
@@ -302,8 +301,10 @@ All four methods return `this`, so you can chain them.
 
 | Method | Description |
 |---|---|
-| `RunAndWaitForList(WorkerType, Items, Payload, var Results): Boolean` | Split a list, wait, collect results, clean up |
-| `RunAndWaitForRecords(WorkerType, RecRef, Payload, var Results): Boolean` | Split records, wait, collect results, clean up |
+| `RunAndWaitForList(WorkerType, Items, var Results): Boolean` | Split a list, wait, collect results, clean up |
+| `RunAndWaitForList(WorkerType, Items, Payload, var Results): Boolean` | Same, with additional payload merged into each chunk |
+| `RunAndWaitForRecords(WorkerType, RecRef, var Results): Boolean` | Split records, wait, collect results, clean up |
+| `RunAndWaitForRecords(WorkerType, RecRef, Payload, var Results): Boolean` | Same, with additional payload merged into each chunk |
 | `RunAndWaitForChunks(WorkerType, Chunks, var Results): Boolean` | Run chunks, wait, collect results, clean up |
 
 Returns `true` if all chunks succeeded. On failure, `Results` is empty — use the granular API below if you need error details or retry.
@@ -314,8 +315,10 @@ Returns `true` if all chunks succeeded. On failure, `Results` is empty — use t
 
 | Method | Description |
 |---|---|
-| `RunForRecords(WorkerType, RecRef, Payload): Guid` | Split a filtered RecordRef across threads |
-| `RunForList(WorkerType, Items, Payload): Guid` | Split a List of [Text] across threads |
+| `RunForList(WorkerType, Items): Guid` | Split a List of [Text] across threads |
+| `RunForList(WorkerType, Items, Payload): Guid` | Same, with additional payload merged into each chunk |
+| `RunForRecords(WorkerType, RecRef): Guid` | Split a filtered RecordRef across threads |
+| `RunForRecords(WorkerType, RecRef, Payload): Guid` | Same, with additional payload merged into each chunk |
 | `RunForChunks(WorkerType, Chunks): Guid` | One chunk per JsonObject, no auto-splitting |
 
 **Waiting & Status:**
@@ -497,7 +500,7 @@ The last dispatcher to acquire the lock always has the most up-to-date count. Th
 ### Handling partial failures
 
 ```al
-BatchId := Coordinator.SetThreads(4).RunForList(WorkerType, Items, Payload);
+BatchId := Coordinator.SetThreads(4).RunForList(WorkerType, Items);
 
 if not Coordinator.WaitForCompletion(BatchId) then begin
     case Coordinator.GetStatus(BatchId) of
@@ -526,7 +529,7 @@ Coordinator.Cleanup(BatchId);
 ### Retry pattern
 
 ```al
-procedure RunWithRetry(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; Payload: JsonObject; MaxRetries: Integer)
+procedure RunWithRetry(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; MaxRetries: Integer)
 var
     Coordinator: Codeunit "PW Batch Coordinator";
     FailedInputs: List of [JsonObject];
@@ -535,7 +538,7 @@ var
     Attempt: Integer;
 begin
     // First run: use RunForList
-    BatchId := Coordinator.SetThreads(4).RunForList(WorkerType, Items, Payload);
+    BatchId := Coordinator.SetThreads(4).RunForList(WorkerType, Items);
     Coordinator.WaitForCompletion(BatchId);
 
     for Attempt := 1 to MaxRetries do begin
@@ -563,7 +566,7 @@ For long-running batches, avoid blocking the user's session:
 
 ```al
 // Start the batch and store the BatchId (e.g., on a record or in a page variable)
-BatchId := Coordinator.SetThreads(8).RunForRecords(WorkerType, RecRef, Payload);
+BatchId := Coordinator.SetThreads(8).RunForRecords(WorkerType, RecRef);
 // Don't call WaitForCompletion — return immediately
 
 // Later (e.g., on a timer, or when user clicks "Refresh"):
