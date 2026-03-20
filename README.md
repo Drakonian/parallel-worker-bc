@@ -131,7 +131,6 @@ graph TB
     end
 
     Code -->|"Configure & RunFor*"| Coordinator
-    Worker -->|"Read input / Set results"| Context
     Coordinator -->|"Create records & StartSession ×N"| Store
     Coordinator -.->|"Poll status / Read results"| Store
     Dispatcher -->|"Read input / Write results"| Chunk
