@@ -657,7 +657,3 @@ The library ships with two pages for observing batch execution:
 4. **Session limits.** Business Central has per-tenant limits on concurrent background sessions. Don't set thread count too high — 4-8 is typically sufficient.
 
 5. **Commit required before RunFor\*.** The coordinator must commit internally. You cannot have pending write transactions when calling any `RunFor*` method.
-
-## License
-
-MIT
