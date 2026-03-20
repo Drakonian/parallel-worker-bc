@@ -115,13 +115,14 @@ graph TB
 
     subgraph API["Consumer API"]
         Coordinator["PW Batch Coordinator"]
+        Context["PW Chunk Context"]
     end
 
     subgraph Engine["Execution Engine (× N background sessions)"]
         Dispatcher["PW Task Dispatcher"]
-        Context["PW Chunk Context"]
+        Runner["PW Worker Runner"]
         Worker["Your Worker (Execute)"]
-        Dispatcher --> Context --> Worker
+        Dispatcher --> Runner --> Worker
     end
 
     subgraph Store["State Store (Database as IPC)"]
@@ -130,6 +131,7 @@ graph TB
     end
 
     Code -->|"Configure & RunFor*"| Coordinator
+    Worker -->|"Read input / Set results"| Context
     Coordinator -->|"Create records & StartSession ×N"| Store
     Coordinator -.->|"Poll status / Read results"| Store
     Dispatcher -->|"Read input / Write results"| Chunk
@@ -140,9 +142,27 @@ The library has three layers:
 
 | Layer | Objects | Role |
 |---|---|---|
-| **Consumer API** | `PW Batch Coordinator` | The only object you interact with. Configure, run, wait, read results. |
-| **Execution Engine** | `PW Task Dispatcher`, `PW Chunk Context` | Internal. Each background session runs the dispatcher, which calls your worker. |
+| **Consumer API** | `PW Batch Coordinator`, `PW Chunk Context` | The objects you interact with. Coordinator to run batches, ChunkContext inside your worker's `Execute`. |
+| **Execution Engine** | `PW Task Dispatcher`, `PW Worker Runner` | Internal. Each background session runs the dispatcher, which calls your worker. |
 | **State Store** | `PW Batch`, `PW Batch Chunk` | Database tables used as an IPC channel between sessions. |
+
+### Why StartSession?
+
+Business Central offers four ways to run code in the background. Here's why the library uses `StartSession`:
+
+| | StartSession | Page Background Tasks | Task Scheduler | Job Queue |
+|---|---|---|---|---|
+| Can write to DB | Yes | No (read-only) | Yes | Yes |
+| Starts immediately | Yes | Yes | No (queued) | No (scheduled) |
+| Survives restart | No | No | Yes | Yes |
+| Tied to a page | No | Yes | No | No |
+| Concurrent sessions | You control | Max 5 per session | Platform-controlled | Platform-controlled |
+| Timeout parameter | Yes (`Duration`) | Yes (max 10 min) | No | No |
+| Detect dead sessions | Yes (`IsSessionActive`) | N/A | No | No |
+
+**Page Background Tasks** are read-only and canceled if the user navigates away — unsuitable for a general-purpose library. **Task Scheduler** and **Job Queue** are designed for deferred or recurring work, not real-time parallelism — they may not start for seconds or minutes, and it's hard to control how many run concurrently.
+
+`StartSession` is the only option that fires immediately, supports database writes, allows controlling concurrency, and provides session lifecycle management (`IsSessionActive`, `Duration` timeout). The tradeoff is no restart survival, but parallel batches are short-lived (seconds to minutes) — the monitoring pages handle stuck batches if a restart occurs.
 
 ### Execution Flow
 
