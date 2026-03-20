@@ -156,7 +156,7 @@ sequenceDiagram
     participant W1 as Worker (chunk 1)
     participant W2 as Worker (chunk 2)
 
-    C->>BC: RunForList(WorkerType, Items, Payload)
+    C->>BC: RunForList(WorkerType, Items)
     BC->>DB: INSERT Batch (Status=Running)
     BC->>DB: INSERT Chunk 1 (Status=Pending)
     BC->>DB: INSERT Chunk 2 (Status=Pending)
