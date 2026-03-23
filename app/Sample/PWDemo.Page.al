@@ -45,6 +45,12 @@ page 99100 "PW Demo"
                     MinValue = 1;
                     MaxValue = 10;
                 }
+                field(BatchTimeoutSec; BatchTimeoutSec)
+                {
+                    Caption = 'Batch Timeout (s)';
+                    ToolTip = 'Max time the caller waits for batch completion. 0 = wait forever.';
+                    MinValue = 0;
+                }
                 field(SessionTimeoutMs; SessionTimeoutMs)
                 {
                     Caption = 'Session Timeout (ms)';
@@ -139,6 +145,7 @@ page 99100 "PW Demo"
                 trigger OnAction()
                 begin
                     ClearOutput();
+                    SampleRunner.SetBatchTimeout(BatchTimeoutSec);
                     SampleRunner.SetSessionTimeout(SessionTimeoutMs);
                     SampleRunner.RunListSimulation(
                         TaskCount, WorkDurationMs, ThreadCount,
@@ -154,6 +161,7 @@ page 99100 "PW Demo"
                 trigger OnAction()
                 begin
                     ClearOutput();
+                    SampleRunner.SetBatchTimeout(BatchTimeoutSec);
                     SampleRunner.SetSessionTimeout(SessionTimeoutMs);
                     SampleRunner.RunRecordCount(
                         TableNo, ThreadCount,
@@ -171,6 +179,7 @@ page 99100 "PW Demo"
                     TableNos: List of [Integer];
                 begin
                     ClearOutput();
+                    SampleRunner.SetBatchTimeout(BatchTimeoutSec);
                     SampleRunner.SetSessionTimeout(SessionTimeoutMs);
                     SampleRunner.ParseTableNos(TableNosText, TableNos);
                     SampleRunner.RunMultiTableCount(
@@ -234,6 +243,7 @@ page 99100 "PW Demo"
         TaskCount: Integer;
         WorkDurationMs: Integer;
         ThreadCount: Integer;
+        BatchTimeoutSec: Integer;
         SessionTimeoutMs: Integer;
         TableNo: Integer;
         TableNosText: Text;
@@ -250,6 +260,7 @@ page 99100 "PW Demo"
         TaskCount := 20;
         WorkDurationMs := 200;
         ThreadCount := 4;
+        BatchTimeoutSec := 300;
         SessionTimeoutMs := 60000;
         TableNo := 17;
         TableNosText := '8,9,18,17,27';

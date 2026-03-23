@@ -19,7 +19,7 @@ codeunit 99101 "PW Sample Record Counter" implements "PW IParallel Worker"
         ChunkSize := Ctx.GetChunkSize();
 
         repeat
-            Count += 1;
+            Count += 1; //your slow process with Chunk of records
         until (RecRef.Next() = 0) or (Count >= ChunkSize);
 
         Result.Add('ChunkIndex', Ctx.GetChunkIndex());

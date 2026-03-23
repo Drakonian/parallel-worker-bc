@@ -398,6 +398,16 @@
           <note from="Developer" annotates="general" priority="2"></note>
           <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control Input - Property Caption</note>
         </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 3531513814 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Max time the caller waits for batch completion. 0 = wait forever.</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control BatchTimeoutSec - Property ToolTip</note>
+        </trans-unit>
+        <trans-unit id="Page 3985274024 - Control 3531513814 - Property 2879900210" size-unit="char" translate="yes" xml:space="preserve">
+          <source>Batch Timeout (s)</source>
+          <note from="Developer" annotates="general" priority="2"></note>
+          <note from="Xliff Generator" annotates="general" priority="3">Page PW Demo - Control BatchTimeoutSec - Property Caption</note>
+        </trans-unit>
         <trans-unit id="Page 3985274024 - Control 3467738333 - Property 1295455071" size-unit="char" translate="yes" xml:space="preserve">
           <source>Max runtime per session. Platform kills the session if exceeded. 0 = no limit.</source>
           <note from="Developer" annotates="general" priority="2"></note>

@@ -9,6 +9,7 @@ codeunit 99102 "PW Sample Runner"
     Access = Internal;
 
     var
+        RunnerBatchTimeoutSec: Integer;
         RunnerSessionTimeoutMs: Integer;
         TableNoRecordsLbl: Label 'Table %1 has no records.', Comment = '%1 = table number';
         CompletedRecordsLbl: Label 'Completed — %1 records across %2 chunks', Comment = '%1 = total record count, %2 = chunk count';
@@ -19,6 +20,11 @@ codeunit 99102 "PW Sample Runner"
         RecordCountLbl: Label '%1 records', Comment = '%1 = number of records';
         TotalCountedLbl: Label 'Total counted: %1', Comment = '%1 = total record count';
         TableRecordCountLbl: Label ': %1 records', Comment = '%1 = record count';
+
+    procedure SetBatchTimeout(Seconds: Integer)
+    begin
+        RunnerBatchTimeoutSec := Seconds;
+    end;
 
     procedure SetSessionTimeout(Milliseconds: Integer)
     begin
@@ -53,7 +59,7 @@ codeunit 99102 "PW Sample Runner"
         StartTime := CurrentDateTime();
         BatchId := Coordinator
             .SetThreads(ThreadCount)
-            .SetBatchTimeout(300)
+            .SetBatchTimeout(RunnerBatchTimeoutSec)
             .SetSessionTimeout(RunnerSessionTimeoutMs)
             .RunForList("PW Worker Type"::Sample, Items, Payload);
 
@@ -107,7 +113,7 @@ codeunit 99102 "PW Sample Runner"
         StartTime := CurrentDateTime();
         BatchId := Coordinator
             .SetThreads(ThreadCount)
-            .SetBatchTimeout(300)
+            .SetBatchTimeout(RunnerBatchTimeoutSec)
             .SetSessionTimeout(RunnerSessionTimeoutMs)
             .RunForRecords("PW Worker Type"::RecordCounter, RecRef, Payload);
 
@@ -163,7 +169,7 @@ codeunit 99102 "PW Sample Runner"
 
         StartTime := CurrentDateTime();
         BatchId := Coordinator
-            .SetBatchTimeout(300)
+            .SetBatchTimeout(RunnerBatchTimeoutSec)
             .SetSessionTimeout(RunnerSessionTimeoutMs)
             .RunForChunks("PW Worker Type"::TableCounter, Chunks);
 
