@@ -1,5 +1,7 @@
 # Parallel Worker for Business Central
 
+<img src="assets/ParallelWorkerBanner.webp" alt="Parallel Worker Banner" width="100%">
+
 An AL library for **parallel processing** in Business Central. Split work into chunks, run them across multiple background sessions via StartSession, and collect results, with built-in error handling, timeout control, and dead session recovery.
 
 ## Why?
@@ -645,7 +647,12 @@ Message('Progress: %1 / %2 chunks completed',
 The library ships with two pages for observing batch execution:
 
 - **PW Batches** (page 99000) — list of all batches with status, chunk counters, and timestamps. Actions: View Chunks, Cleanup Selected, Cleanup Older Than 24h.
-- **PW Batch Chunk List** (page 99001) — chunk details for a batch. Actions: View Error Call Stack, View Input Payload, View Result Payload.
+
+![PW Batches](assets/BatchesMonitoring.png)
+
+- **PW Batch Chunk List** (page 99001) — chunk details for a batch. Actions: View Full Error, View Error Call Stack, View Input Payload, View Result Payload.
+
+![PW Batch Chunks](assets/BatchChunksMonitoring.png)
 
 ### Automatic Cleanup
 
