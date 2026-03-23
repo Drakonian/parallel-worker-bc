@@ -1,6 +1,6 @@
 # Parallel Worker for Business Central
 
-A lightweight library that brings **parallel processing** to AL. Split your workload across multiple background sessions and collect results — with a clean, type-safe API.
+An AL library for **parallel processing** in Business Central. Split work into chunks, run them across multiple background sessions via StartSession, and collect results, with built-in error handling, timeout control, and dead session recovery.
 
 ## Why?
 
