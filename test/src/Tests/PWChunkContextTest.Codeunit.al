@@ -131,7 +131,7 @@ codeunit 99201 "PW Chunk Context Test"
 
         Chunk.Get(BatchId, 1);
         Ctx.Init(Chunk);
-        ResultArr := Ctx.GetInputArray('$Items');
+        ResultArr := Ctx.GetItems();
 
         LibraryAssert.AreEqual(3, ResultArr.Count(), 'Array should have 3 items');
     end;

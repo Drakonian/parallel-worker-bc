@@ -440,29 +440,50 @@ codeunit 99000 "PW Batch Coordinator"
 
     /// <summary>
     /// Convenience method: runs a list of items in parallel, waits for completion,
-    /// collects results, and cleans up — all in one call.
+    /// and collects results — all in one call. Batch records are kept for monitoring.
     /// </summary>
-    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
-    /// <param name="Items">The list of text items to distribute across chunks.</param>
-    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
-    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
     procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; var Results: List of [JsonObject]): Boolean
     var
         EmptyPayload: JsonObject;
+        DiscardErrors: List of [Text];
     begin
-        exit(RunAndWaitForList(WorkerType, Items, EmptyPayload, Results));
+        exit(RunAndWaitForList(WorkerType, Items, EmptyPayload, false, Results, DiscardErrors));
     end;
 
     /// <summary>
     /// Convenience method: runs a list of items in parallel, waits for completion,
-    /// collects results, and cleans up — all in one call.
+    /// and collects results — all in one call. Batch records are kept for monitoring.
+    /// </summary>
+    procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; BasePayload: JsonObject; var Results: List of [JsonObject]): Boolean
+    var
+        DiscardErrors: List of [Text];
+    begin
+        exit(RunAndWaitForList(WorkerType, Items, BasePayload, false, Results, DiscardErrors));
+    end;
+
+    /// <summary>
+    /// Convenience method: runs a list of items in parallel, waits for completion,
+    /// and collects results — all in one call.
+    /// </summary>
+    procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; BasePayload: JsonObject; AutoCleanup: Boolean; var Results: List of [JsonObject]): Boolean
+    var
+        DiscardErrors: List of [Text];
+    begin
+        exit(RunAndWaitForList(WorkerType, Items, BasePayload, AutoCleanup, Results, DiscardErrors));
+    end;
+
+    /// <summary>
+    /// Convenience method: runs a list of items in parallel, waits for completion,
+    /// collects results and errors — all in one call.
     /// </summary>
     /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
     /// <param name="Items">The list of text items to distribute across chunks.</param>
     /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
-    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <param name="AutoCleanup">True to delete batch and chunk records after completion; false to keep them.</param>
+    /// <param name="Results">Populated with result objects from completed chunks.</param>
+    /// <param name="Errors">Populated with error messages from failed chunks.</param>
     /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
-    procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; BasePayload: JsonObject; var Results: List of [JsonObject]): Boolean
+    procedure RunAndWaitForList(WorkerType: Enum "PW Worker Type"; Items: List of [Text]; BasePayload: JsonObject; AutoCleanup: Boolean; var Results: List of [JsonObject]; var Errors: List of [Text]): Boolean
     var
         BatchId: Guid;
         Success: Boolean;
@@ -470,44 +491,65 @@ codeunit 99000 "PW Batch Coordinator"
         BatchId := RunForList(WorkerType, Items, BasePayload);
         if IsNullGuid(BatchId) then begin
             Clear(Results);
+            Clear(Errors);
             exit(true);
         end;
 
         Success := WaitForCompletion(BatchId);
-        if Success then
-            GetResults(BatchId, Results)
-        else
-            Clear(Results);
+        GetResults(BatchId, Results);
+        GetErrors(BatchId, Errors);
 
-        Cleanup(BatchId);
+        if AutoCleanup then
+            Cleanup(BatchId);
         exit(Success);
     end;
 
     /// <summary>
     /// Convenience method: splits a filtered record set across threads, waits for completion,
-    /// collects results, and cleans up — all in one call.
+    /// and collects results — all in one call. Batch records are kept for monitoring.
     /// </summary>
-    /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
-    /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
-    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
-    /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
     procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; var Results: List of [JsonObject]): Boolean
     var
         EmptyPayload: JsonObject;
+        DiscardErrors: List of [Text];
     begin
-        exit(RunAndWaitForRecords(WorkerType, RecRef, EmptyPayload, Results));
+        exit(RunAndWaitForRecords(WorkerType, RecRef, EmptyPayload, false, Results, DiscardErrors));
     end;
 
     /// <summary>
     /// Convenience method: splits a filtered record set across threads, waits for completion,
-    /// collects results, and cleans up — all in one call.
+    /// and collects results — all in one call. Batch records are kept for monitoring.
+    /// </summary>
+    procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; BasePayload: JsonObject; var Results: List of [JsonObject]): Boolean
+    var
+        DiscardErrors: List of [Text];
+    begin
+        exit(RunAndWaitForRecords(WorkerType, RecRef, BasePayload, false, Results, DiscardErrors));
+    end;
+
+    /// <summary>
+    /// Convenience method: splits a filtered record set across threads, waits for completion,
+    /// and collects results — all in one call.
+    /// </summary>
+    procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; BasePayload: JsonObject; AutoCleanup: Boolean; var Results: List of [JsonObject]): Boolean
+    var
+        DiscardErrors: List of [Text];
+    begin
+        exit(RunAndWaitForRecords(WorkerType, RecRef, BasePayload, AutoCleanup, Results, DiscardErrors));
+    end;
+
+    /// <summary>
+    /// Convenience method: splits a filtered record set across threads, waits for completion,
+    /// collects results and errors — all in one call.
     /// </summary>
     /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
     /// <param name="RecRef">A RecordRef with filters applied. Records are split evenly across threads.</param>
     /// <param name="BasePayload">Additional JSON payload merged into each chunk's input.</param>
-    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <param name="AutoCleanup">True to delete batch and chunk records after completion; false to keep them.</param>
+    /// <param name="Results">Populated with result objects from completed chunks.</param>
+    /// <param name="Errors">Populated with error messages from failed chunks.</param>
     /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
-    procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; BasePayload: JsonObject; var Results: List of [JsonObject]): Boolean
+    procedure RunAndWaitForRecords(WorkerType: Enum "PW Worker Type"; var RecRef: RecordRef; BasePayload: JsonObject; AutoCleanup: Boolean; var Results: List of [JsonObject]; var Errors: List of [Text]): Boolean
     var
         BatchId: Guid;
         Success: Boolean;
@@ -515,28 +557,52 @@ codeunit 99000 "PW Batch Coordinator"
         BatchId := RunForRecords(WorkerType, RecRef, BasePayload);
         if IsNullGuid(BatchId) then begin
             Clear(Results);
+            Clear(Errors);
             exit(true);
         end;
 
         Success := WaitForCompletion(BatchId);
-        if Success then
-            GetResults(BatchId, Results)
-        else
-            Clear(Results);
+        GetResults(BatchId, Results);
+        GetErrors(BatchId, Errors);
 
-        Cleanup(BatchId);
+        if AutoCleanup then
+            Cleanup(BatchId);
         exit(Success);
     end;
 
     /// <summary>
     /// Convenience method: runs pre-built chunks in parallel, waits for completion,
-    /// collects results, and cleans up — all in one call.
+    /// and collects results — all in one call. Batch records are kept for monitoring.
+    /// </summary>
+    procedure RunAndWaitForChunks(WorkerType: Enum "PW Worker Type"; Chunks: List of [JsonObject]; var Results: List of [JsonObject]): Boolean
+    var
+        DiscardErrors: List of [Text];
+    begin
+        exit(RunAndWaitForChunks(WorkerType, Chunks, false, Results, DiscardErrors));
+    end;
+
+    /// <summary>
+    /// Convenience method: runs pre-built chunks in parallel, waits for completion,
+    /// and collects results — all in one call.
+    /// </summary>
+    procedure RunAndWaitForChunks(WorkerType: Enum "PW Worker Type"; Chunks: List of [JsonObject]; AutoCleanup: Boolean; var Results: List of [JsonObject]): Boolean
+    var
+        DiscardErrors: List of [Text];
+    begin
+        exit(RunAndWaitForChunks(WorkerType, Chunks, AutoCleanup, Results, DiscardErrors));
+    end;
+
+    /// <summary>
+    /// Convenience method: runs pre-built chunks in parallel, waits for completion,
+    /// collects results and errors — all in one call.
     /// </summary>
     /// <param name="WorkerType">The enum value identifying which worker implementation to run.</param>
     /// <param name="Chunks">A list of JSON objects, each representing the full input for one chunk.</param>
-    /// <param name="Results">On success, populated with result objects from all completed chunks.</param>
+    /// <param name="AutoCleanup">True to delete batch and chunk records after completion; false to keep them.</param>
+    /// <param name="Results">Populated with result objects from completed chunks.</param>
+    /// <param name="Errors">Populated with error messages from failed chunks.</param>
     /// <returns>True if all chunks completed successfully; false on failure or partial failure.</returns>
-    procedure RunAndWaitForChunks(WorkerType: Enum "PW Worker Type"; Chunks: List of [JsonObject]; var Results: List of [JsonObject]): Boolean
+    procedure RunAndWaitForChunks(WorkerType: Enum "PW Worker Type"; Chunks: List of [JsonObject]; AutoCleanup: Boolean; var Results: List of [JsonObject]; var Errors: List of [Text]): Boolean
     var
         BatchId: Guid;
         Success: Boolean;
@@ -544,16 +610,16 @@ codeunit 99000 "PW Batch Coordinator"
         BatchId := RunForChunks(WorkerType, Chunks);
         if IsNullGuid(BatchId) then begin
             Clear(Results);
+            Clear(Errors);
             exit(true);
         end;
 
         Success := WaitForCompletion(BatchId);
-        if Success then
-            GetResults(BatchId, Results)
-        else
-            Clear(Results);
+        GetResults(BatchId, Results);
+        GetErrors(BatchId, Errors);
 
-        Cleanup(BatchId);
+        if AutoCleanup then
+            Cleanup(BatchId);
         exit(Success);
     end;
 

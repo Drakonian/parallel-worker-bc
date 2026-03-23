@@ -11,10 +11,10 @@ codeunit 99100 "PW Sample Worker" implements "PW IParallel Worker"
         WorkDurationMs: Integer;
         i: Integer;
     begin
-        Items := Ctx.GetInputArray('$Items');
+        Items := Ctx.GetItems();
         WorkDurationMs := Ctx.GetIntInput('WorkDurationMs');
 
-        // Simulate heavy work for each item
+        // Simulate heavy work for each item in Chunk context (subset)
         for i := 1 to Items.Count() do
             Sleep(WorkDurationMs);
 

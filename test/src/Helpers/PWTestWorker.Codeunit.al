@@ -10,7 +10,6 @@ codeunit 99205 "PW Test Worker" implements "PW IParallel Worker"
     var
         Input: JsonObject;
         Token: JsonToken;
-        Items: JsonArray;
         Result: JsonObject;
     begin
         Input := Ctx.GetInput();
@@ -19,10 +18,8 @@ codeunit 99205 "PW Test Worker" implements "PW IParallel Worker"
             if Token.AsValue().AsBoolean() then
                 Error('Test error: chunk configured to fail');
 
-        if Input.Get('$Items', Token) then begin
-            Items := Token.AsArray();
-            Result.Add('ItemCount', Items.Count());
-        end;
+        if Ctx.HasItems() then
+            Result.Add('ItemCount', Ctx.GetItems().Count());
 
         Result.Add('ChunkIndex', Ctx.GetChunkIndex());
         Ctx.SetResult(Result);

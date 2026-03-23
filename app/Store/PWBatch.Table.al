@@ -67,4 +67,12 @@ table 99000 "PW Batch"
             Clustered = true;
         }
     }
+
+    trigger OnDelete()
+    var
+        Chunk: Record "PW Batch Chunk";
+    begin
+        Chunk.SetRange("Batch Id", Rec.Id);
+        Chunk.DeleteAll();
+    end;
 }

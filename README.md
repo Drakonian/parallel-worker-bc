@@ -47,9 +47,9 @@ codeunit 50100 "My Invoice Poster" implements "PW IParallel Worker"
         i: Integer;
     begin
         // Get the list of items assigned to this chunk
-        Items := Ctx.GetInputArray('$Items');
+        Items := Ctx.GetItems();
 
-        for i := 0 to Items.Count() - 1 do begin
+        for i := 1 to Items.Count() do begin
             Items.Get(i, Token);
             InvoiceNo := Token.AsValue().AsText();
 
@@ -249,8 +249,8 @@ var
     Token: JsonToken;
     i: Integer;
 begin
-    Items := Ctx.GetInputArray('$Items');
-    for i := 0 to Items.Count() - 1 do begin
+    Items := Ctx.GetItems();
+    for i := 1 to Items.Count() do begin
         Items.Get(i, Token);
         ProcessItem(Token.AsValue().AsText());
     end;
@@ -381,10 +381,17 @@ Ctx.GetChunkIndex(): Integer                // This chunk's index (1-based)
 Ctx.GetBatchId(): Guid                      // Parent batch ID
 ```
 
+### List Chunks (RunForList only)
+
+```al
+Ctx.HasItems(): Boolean                     // True if chunk contains a $Items array
+Ctx.GetItems(): JsonArray                   // The items array assigned to this chunk
+```
+
 ### Record Chunks (RunForRecords only)
 
 ```al
-Ctx.IsRecordChunk(): Boolean                // Was this created via RunForRecords?
+Ctx.IsRecordChunk(): Boolean                // True if chunk contains record-based input
 Ctx.GetRecordRef(var RecRef)                // Opens table, applies filter, positions cursor
 Ctx.GetChunkSize(): Integer                  // Number of records in this chunk
 ```
@@ -416,6 +423,38 @@ The library enforces strict transaction boundaries:
 3. **Every Commit is documented.** Every `Commit()` call has an inline comment explaining why it exists:
    - Coordinator: 1 per `RunFor*` call (persist batch + chunks before `StartSession`). If any `StartSession` call fails, 2 additional commits handle failed chunk statuses and batch counter updates with `UpdLock`.
    - Dispatcher: 3 per chunk at runtime (persist Running status, persist Completed/Failed status, release UpdLock after counter update)
+
+```mermaid
+flowchart TD
+    subgraph coordinator["Coordinator — caller session"]
+        direction TB
+        A1["RunFor*(WorkerType, Items)"] --> A2{"Write transaction\nactive?"}
+        A2 -->|"Yes"| A3["Error: caller has uncommitted\nchanges that would be\nsilently committed"]
+        A2 -->|"No"| A4["INSERT Batch + Chunks"]
+        A4 --> A5["COMMIT 1\nPersist records — StartSession\nfires immediately, sessions must\nfind chunk records on startup"]
+        A5 --> A6["StartSession × N"]
+    end
+
+    subgraph dispatcher["Dispatcher — background session, per chunk"]
+        direction TB
+        B1["Mark chunk → Running"] --> B2["COMMIT 2\nRunning status visible to caller\npolling with ReadUncommitted"]
+        B2 --> B3["Codeunit.Run WorkerRunner\nCommitBehavior::Error applied:\nworker Commit() → runtime error"]
+        B3 -->|"Success"| B4["Save results, mark Completed"]
+        B3 -->|"Error"| B5["Codeunit.Run rolls back all\nworker DB changes \nRe-read chunk, capture error\nMark Failed"]
+        B4 --> B6["COMMIT 3\nPersist chunk outcome\nbefore taking batch lock"]
+        B5 --> B6
+        B6 --> B7["UpdLock on Batch row\nRecount chunk statuses\nSet terminal status if all done"]
+        B7 --> B8["COMMIT 4\nRelease lock, next dispatcher\nwaiting on UpdLock can proceed"]
+    end
+
+    A6 -.->|"starts"| B1
+
+    style A3 fill:#FEF2F2,stroke:#EF4444
+    style A5 fill:#DBEAFE,stroke:#3B82F6
+    style B2 fill:#DBEAFE,stroke:#3B82F6
+    style B6 fill:#DBEAFE,stroke:#3B82F6
+    style B8 fill:#DBEAFE,stroke:#3B82F6
+```
 
 ### Error Handling
 

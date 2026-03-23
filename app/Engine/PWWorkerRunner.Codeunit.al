@@ -22,7 +22,7 @@ codeunit 99004 "PW Worker Runner"
     var
         Worker: Interface "PW IParallel Worker";
     begin
-        // CommitBehavior::Error prevents workers from calling Commit() inside Execute.
+        // CommitBehavior::Error prevents workers from calling explicit Commit() inside Execute.
         // If a worker calls Commit(), a runtime error is raised immediately.
         // Codeunit.Run catches it and rolls back all database changes.
         Worker := WorkerType;

@@ -152,6 +152,26 @@ codeunit 99001 "PW Chunk Context"
     end;
 
     /// <summary>
+    /// Checks whether this chunk has an items array (created by RunForList).
+    /// </summary>
+    /// <returns>True if the chunk contains a $Items key.</returns>
+    procedure HasItems(): Boolean
+    begin
+        CheckInitialized();
+        exit(InputJson.Contains('$Items'));
+    end;
+
+    /// <summary>
+    /// Returns the items array for chunks created by RunForList.
+    /// This is a convenience method for GetInputArray('$Items').
+    /// </summary>
+    /// <returns>The JSON array of items assigned to this chunk.</returns>
+    procedure GetItems(): JsonArray
+    begin
+        exit(GetInputArray('$Items'));
+    end;
+
+    /// <summary>
     /// Indicates whether this chunk was created by RunForRecords and contains record-based input.
     /// </summary>
     /// <returns>True if the chunk carries record data; false otherwise.</returns>

@@ -926,12 +926,38 @@ codeunit 99209 "PW Integration Test"
     end;
 
     [Test]
-    procedure RunAndWaitCleansUpAfterSuccess()
-    // [SCENARIO 11.8] RunAndWait deletes batch and chunk records after success
+    procedure RunAndWaitKeepsRecordsByDefault()
+    // [SCENARIO 11.8] RunAndWait keeps batch records by default (AutoCleanup=false)
     var
         Coordinator: Codeunit "PW Batch Coordinator";
         Batch: Record "PW Batch";
-        Chunk: Record "PW Batch Chunk";
+        Items: List of [Text];
+        Results: List of [JsonObject];
+        BatchCountBefore: Integer;
+    begin
+        Batch.Reset();
+        BatchCountBefore := Batch.Count();
+
+        Items.Add('X');
+        Coordinator.SetThreads(1).SetBatchTimeout(30).RunAndWaitForList(
+            "PW Worker Type"::TestWorker, Items, Results);
+
+        Batch.Reset();
+        LibraryAssert.AreEqual(BatchCountBefore + 1, Batch.Count(),
+            'Batch should be kept when AutoCleanup is not set');
+
+        // Clean up manually
+        Batch.FindLast();
+        Coordinator.Cleanup(Batch.Id);
+        Commit();
+    end;
+
+    [Test]
+    procedure RunAndWaitCleansUpWhenEnabled()
+    // [SCENARIO 11.9] RunAndWait deletes batch records when AutoCleanup = true
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Batch: Record "PW Batch";
         Items: List of [Text];
         Payload: JsonObject;
         Results: List of [JsonObject];
@@ -942,9 +968,8 @@ codeunit 99209 "PW Integration Test"
 
         Items.Add('X');
         Coordinator.SetThreads(1).SetBatchTimeout(30).RunAndWaitForList(
-            "PW Worker Type"::TestWorker, Items, Payload, Results);
+            "PW Worker Type"::TestWorker, Items, Payload, true, Results);
 
-        // Batch records should be cleaned up — count should be same as before
         Batch.Reset();
         LibraryAssert.AreEqual(BatchCountBefore, Batch.Count(),
             'Batch should be cleaned up after RunAndWait');
@@ -954,7 +979,7 @@ codeunit 99209 "PW Integration Test"
 
     [Test]
     procedure RunAndWaitCleansUpAfterFailure()
-    // [SCENARIO 11.9] RunAndWait deletes batch and chunk records after failure
+    // [SCENARIO 11.10] RunAndWait deletes batch records after failure when AutoCleanup = true
     var
         Coordinator: Codeunit "PW Batch Coordinator";
         Batch: Record "PW Batch";
@@ -969,7 +994,7 @@ codeunit 99209 "PW Integration Test"
         Chunk.Add('Data', 'test');
         Chunks.Add(Chunk);
         Coordinator.SetBatchTimeout(30).RunAndWaitForChunks(
-            "PW Worker Type"::TestErrorWorker, Chunks, Results);
+            "PW Worker Type"::TestErrorWorker, Chunks, true, Results);
 
         Batch.Reset();
         LibraryAssert.AreEqual(BatchCountBefore, Batch.Count(),
