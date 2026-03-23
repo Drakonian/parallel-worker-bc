@@ -1,6 +1,6 @@
 # Parallel Worker for Business Central
 
-<img src="assets/ParallelWorkerBanner.webp" alt="Parallel Worker Banner" width="100%">
+<img src="assets/ParallelWorkerBanner.webp" alt="Parallel Worker Banner" width="600px">
 
 An AL library for **parallel processing** in Business Central. Split work into chunks, run them across multiple background sessions via StartSession, and collect results, with built-in error handling, timeout control, and dead session recovery.
 
