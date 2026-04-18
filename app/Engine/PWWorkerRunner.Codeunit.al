@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99004 "PW Worker Runner"
 {
     Access = Internal;

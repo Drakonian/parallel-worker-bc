@@ -5,7 +5,8 @@
       "Bash(alc:*)",
       "Bash(al compile:*)",
       "Bash(MSYS_NO_PATHCONV=1 al compile:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "WebFetch(domain:vld-bc.com)"
     ]
   }
 }

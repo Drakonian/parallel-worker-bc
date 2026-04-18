@@ -1,8 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-using System.TestLibraries.Utilities;
-
 codeunit 99203 "PW Batch Cleanup Test"
 {
     Subtype = Test;

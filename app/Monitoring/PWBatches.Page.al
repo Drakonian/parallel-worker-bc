@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 page 99000 "PW Batches"
 {
     ApplicationArea = All;

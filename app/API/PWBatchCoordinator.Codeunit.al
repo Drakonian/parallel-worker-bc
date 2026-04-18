@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 /// <summary>
 /// Orchestrates parallel execution by splitting work into chunks and dispatching them to background sessions.
 /// </summary>

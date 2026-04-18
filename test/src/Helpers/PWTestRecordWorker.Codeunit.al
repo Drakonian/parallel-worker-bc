@@ -1,7 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99208 "PW Test Record Worker" implements "PW IParallel Worker"
 {
     Access = Internal;

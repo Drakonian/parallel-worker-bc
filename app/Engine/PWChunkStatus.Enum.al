@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 enum 99001 "PW Chunk Status"
 {
     Extensible = false;

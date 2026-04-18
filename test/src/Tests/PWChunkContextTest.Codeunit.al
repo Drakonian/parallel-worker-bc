@@ -1,8 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-using System.TestLibraries.Utilities;
-
 codeunit 99201 "PW Chunk Context Test"
 {
     Subtype = Test;

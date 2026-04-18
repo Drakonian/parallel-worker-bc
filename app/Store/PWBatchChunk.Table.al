@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 table 99001 "PW Batch Chunk"
 {
     Caption = 'PW Batch Chunk';

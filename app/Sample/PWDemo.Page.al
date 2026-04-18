@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 page 99100 "PW Demo"
 {
     ApplicationArea = All;

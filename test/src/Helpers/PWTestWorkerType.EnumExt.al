@@ -1,7 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-
 enumextension 99201 "PW Test Worker Type" extends "PW Worker Type"
 {
     value(99201; TestWorker)

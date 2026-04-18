@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 /// <summary>
 /// Provides access to the input data and result storage for a single chunk during parallel execution.
 /// </summary>

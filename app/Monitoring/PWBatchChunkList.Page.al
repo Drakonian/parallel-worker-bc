@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 page 99001 "PW Batch Chunk List"
 {
     ApplicationArea = All;

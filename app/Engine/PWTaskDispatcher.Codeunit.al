@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99002 "PW Task Dispatcher"
 {
     Access = Internal;

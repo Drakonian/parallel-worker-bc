@@ -1,8 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-using System.TestLibraries.Utilities;
-
 codeunit 99202 "PW Coordinator Test"
 {
     Subtype = Test;

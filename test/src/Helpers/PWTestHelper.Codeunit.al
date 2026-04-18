@@ -1,7 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99204 "PW Test Helper"
 {
     Access = Internal;

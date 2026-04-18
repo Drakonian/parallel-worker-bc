@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99003 "PW Batch Cleanup"
 {
     Access = Public;

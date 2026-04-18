@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 /// <summary>
 /// Sample worker for RunForChunks pattern.
 /// Each chunk receives a TableNo in its payload and counts all records in that table.

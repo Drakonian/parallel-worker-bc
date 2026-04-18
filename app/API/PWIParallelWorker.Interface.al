@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 /// <summary>
 /// Defines the contract for a parallel worker that processes a single chunk of work.
 /// </summary>

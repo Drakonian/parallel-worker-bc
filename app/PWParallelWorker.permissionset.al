@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 permissionset 99000 "PW Parallel Worker"
 {
     Assignable = true;

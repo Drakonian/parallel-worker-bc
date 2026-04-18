@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99100 "PW Sample Worker" implements "PW IParallel Worker"
 {
     Access = Internal;

@@ -34,33 +34,37 @@ The library splits work into **chunks across N threads** (e.g., 500 items with 4
 
 ## Quick Start
 
+Scenario: fetch the current exchange rate for each currency in a list by calling an external REST API. Each HTTP call is independent and latency-bound — exactly the kind of workload the library speeds up.
+
 ### 1. Implement your worker
 
+A worker reads its slice of work from `Ctx`, does its job, and writes back a `JsonObject` result. Items are distributed by the coordinator; the payload is shared across all chunks.
+
 ```al
-codeunit 50100 "My Invoice Poster" implements "PW IParallel Worker"
+codeunit 50100 "Exchange Rate Worker" implements "PW IParallel Worker"
 {
     procedure Execute(var Ctx: Codeunit "PW Chunk Context")
     var
         Items: JsonArray;
         Token: JsonToken;
-        InvoiceNo: Text;
+        Rates: JsonObject;
         Result: JsonObject;
-        SuccessCount: Integer;
+        BaseCurrency: Text;
+        CurrencyCode: Text;
+        Rate: Decimal;
         i: Integer;
     begin
-        // Get the list of items assigned to this chunk
-        Items := Ctx.GetItems();
+        Items := Ctx.GetItems();                          // currencies assigned to this chunk
+        BaseCurrency := Ctx.GetTextInput('BaseCurrency'); // shared payload, same for every chunk
 
         for i := 1 to Items.Count() do begin
             Items.Get(i, Token);
-            InvoiceNo := Token.AsValue().AsText();
-
-            // Your heavy work here
-            PostInvoiceToExternalSystem(InvoiceNo);
-            SuccessCount += 1;
+            CurrencyCode := Token.AsValue().AsText();
+            Rate := FetchRateFromApi(BaseCurrency, CurrencyCode); // your HTTP call
+            Rates.Add(CurrencyCode, Rate);
         end;
 
-        Result.Add('SuccessCount', SuccessCount);
+        Result.Add('Rates', Rates);
         Ctx.SetResult(Result);
     end;
 }
@@ -68,42 +72,56 @@ codeunit 50100 "My Invoice Poster" implements "PW IParallel Worker"
 
 ### 2. Register via enum extension
 
+The coordinator resolves worker types through this enum, so your worker must be wired in before it can run.
+
 ```al
 enumextension 50100 "My Worker Types" extends "PW Worker Type"
 {
-    value(50100; InvoicePoster)
+    value(50100; ExchangeRates)
     {
-        Implementation = "PW IParallel Worker" = "My Invoice Poster";
+        Implementation = "PW IParallel Worker" = "Exchange Rate Worker";
     }
 }
 ```
 
 ### 3. Run it
 
+`RunAndWaitForList` runs the batch, blocks until it finishes, collects results, and cleans up — one call for the common case.
+
 ```al
-procedure PostAllInvoices()
+procedure RefreshExchangeRates()
 var
     Coordinator: Codeunit "PW Batch Coordinator";
-    Items: List of [Text];
+    Currencies: List of [Text];
+    Payload: JsonObject;
     Results: List of [JsonObject];
+    Result: JsonObject;
+    RatesToken: JsonToken;
+    i: Integer;
 begin
-    // Build your work items
-    Items.Add('INV-001');
-    Items.Add('INV-002');
+    Currencies.Add('EUR');
+    Currencies.Add('GBP');
+    Currencies.Add('JPY');
     // ... add more
 
-    // One call: run in parallel, wait, collect results, clean up
-    if Coordinator.SetThreads(4).SetBatchTimeout(120).RunAndWaitForList(
-        "PW Worker Type"::InvoicePoster, Items, Results)
+    Payload.Add('BaseCurrency', 'USD');
+
+    if Coordinator
+        .SetThreads(4)
+        .SetBatchTimeout(120)
+        .RunAndWaitForList("PW Worker Type"::ExchangeRates, Currencies, Payload, Results)
     then
-        // All chunks succeeded — process Results
+        for i := 1 to Results.Count() do begin
+            Result := Results.Get(i);
+            Result.Get('Rates', RatesToken);
+            StoreRates(RatesToken.AsObject()); // { "EUR": 0.91, "GBP": 0.78, ... }
+        end
     else
-        // Some or all chunks failed
-        Message('Batch failed.');
+        Error('Exchange rate refresh failed.');
 end;
 ```
 
-For advanced scenarios (non-blocking, retry, progress polling), use the granular API instead — see [Coordinator API Reference](#coordinator-api-reference).
+For partial failures, retry, non-blocking execution, or progress polling, use the granular API — see [Coordinator API Reference](#coordinator-api-reference).
 
 ## Architecture
 

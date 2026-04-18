@@ -1,7 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker.Test;
-
-using VolodymyrDvernytskyi.ParallelWorker;
-
 codeunit 99207 "PW Test Commit Worker" implements "PW IParallel Worker"
 {
     Access = Internal;

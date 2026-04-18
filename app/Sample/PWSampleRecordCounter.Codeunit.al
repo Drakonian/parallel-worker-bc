@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 /// <summary>
 /// Sample worker that counts records in a chunk range.
 /// Demonstrates the RunForRecords pattern: GetRecordRef + GetChunkSize iteration.

@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 enum 99000 "PW Batch Status"
 {
     Extensible = false;

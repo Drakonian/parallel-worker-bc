@@ -1,5 +1,3 @@
-namespace VolodymyrDvernytskyi.ParallelWorker;
-
 /// <summary>
 /// Demonstrates how to orchestrate parallel work using PW Batch Coordinator.
 /// Each procedure is a self-contained example of a different RunFor* pattern.
