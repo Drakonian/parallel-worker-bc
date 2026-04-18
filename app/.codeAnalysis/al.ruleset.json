@@ -21,6 +21,12 @@
             "id": "AS0092",
             "action": "Hidden",
             "justification": "applicationInsightsKey"
+        },
+        {
+            "id": "AA0247",
+            "action": "Hidden",
+            "justification": "No namespaces"
         }
+
     ]
 }
