@@ -1,60 +1,60 @@
 [
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForListSingleItem"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForListMultipleItems"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForListSplitsEvenly"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForListFewerItemsThanThreads"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForListWaitReturnsTrue"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForListCountersCorrectAfterCompletion"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForChunksWithPayloads"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForChunksIgnoresThreadCount"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForRecordsSplitsAcrossThreads"
     },
     {
-        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "bug":  "These tests require running the test runner with isolation disabled, which AL-Go does not currently support.",
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "RunForRecordsFewerRecordsThanThreads"
