@@ -7,5 +7,12 @@
   "testFolders": [
     "test"
   ],
-  "bcptTestFolders": []
+  "bcptTestFolders": [],
+  "testIsolation": {
+    "enabled": true,
+    "defaultRunnerCodeunitId": 0,
+    "partitions": [
+      { "runnerCodeunitId": 130451, "codeunits": "99209" }
+    ]
+  }
 }
