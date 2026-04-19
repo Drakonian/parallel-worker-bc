@@ -194,7 +194,7 @@ jobs:
           Add-Content -Encoding UTF8 -Path $env:GITHUB_ENV -Value "NeedsContext=$needsContextPath"
 
       - name: Build
-        uses: microsoft/AL-Go-Actions/RunPipeline@v9.0
+        uses: Drakonian/AL-Go/Actions/RunPipeline@AddTestIsolationSupport2
         if: steps.DetermineBuildProject.outputs.BuildIt == 'True'
         env:
           Secrets: '${{ steps.ReadSecrets.outputs.Secrets }}'
