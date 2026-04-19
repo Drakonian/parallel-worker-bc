@@ -1,0 +1,206 @@
+[
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListSingleItem"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListMultipleItems"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListSplitsEvenly"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListFewerItemsThanThreads"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListWaitReturnsTrue"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListCountersCorrectAfterCompletion"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForChunksWithPayloads"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForChunksIgnoresThreadCount"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForRecordsSplitsAcrossThreads"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForRecordsFewerRecordsThanThreads"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "WorkerErrorCaptured"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "PartialFailureMixedResults"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "AllChunksFail"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "GetFailedChunkInputsForRetry"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "CommitInsideWorkerCausesFailure"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "TimeoutCausesWaitToReturnFalse"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "FluentBuilderChaining"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListDefaultThreadCount"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForRecordsUnevenSplit"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "SampleWorkerCompletesSuccessfully"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitForListSuccess"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitForListFailure"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitForRecordsSuccess"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitForChunksSuccess"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitKeepsRecordsByDefault"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitCleansUpWhenEnabled"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitCleansUpAfterFailure"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForListWithoutPayload"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunForRecordsWithoutPayload"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitForListWithoutPayload"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "RunAndWaitForRecordsWithoutPayload"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "SessionTimeoutKillsHungWorker"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "SessionTimeoutDoesNotKillFastWorker"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "BatchTimeoutReturnsFalseButSessionContinues"
+    }
+]
