@@ -14,6 +14,7 @@ codeunit 99001 "PW Chunk Context"
         KeyNotFoundErr: Label 'Key "%1" not found in chunk input.', Comment = '%1 = JSON key name';
         NotRecordChunkErr: Label 'This chunk was not created via RunForRecords.';
         NotInitializedErr: Label 'Chunk context has not been initialized.';
+        RecordSetChangedErr: Label 'The chunk''s record range no longer matches the data: the filtered record set is empty or has shrunk since the batch was created.';
 
     procedure Init(var Chunk: Record "PW Batch Chunk")
     var
@@ -202,9 +203,14 @@ codeunit 99001 "PW Chunk Context"
         if FilterView <> '' then
             RecRef.SetView(FilterView);
 
-        RecRef.FindSet();
+        // Chunk ranges are positional — if records were inserted or deleted
+        // since the batch was created, the ranges no longer match the data.
+        // Fail loudly instead of silently processing another chunk's records.
+        if not RecRef.FindSet() then
+            Error(RecordSetChangedErr);
         if StartIndex > 1 then
-            RecRef.Next(StartIndex - 1);
+            if RecRef.Next(StartIndex - 1) <> StartIndex - 1 then
+                Error(RecordSetChangedErr);
     end;
 
     /// <summary>
@@ -222,6 +228,7 @@ codeunit 99001 "PW Chunk Context"
     /// <param name="Result">The JSON object to store as the sole result.</param>
     procedure SetResult(Result: JsonObject)
     begin
+        CheckInitialized();
         Clear(Results);
         Results.Add(Result);
     end;
@@ -232,6 +239,7 @@ codeunit 99001 "PW Chunk Context"
     /// <param name="Result">The JSON object to append.</param>
     procedure AppendResult(Result: JsonObject)
     begin
+        CheckInitialized();
         Results.Add(Result);
     end;
 

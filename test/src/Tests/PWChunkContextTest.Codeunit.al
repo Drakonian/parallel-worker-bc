@@ -507,4 +507,106 @@ codeunit 99201 "PW Chunk Context Test"
         Chunk.CalcFields("Result Payload");
         LibraryAssert.IsFalse(Chunk."Result Payload".HasValue(), 'Result blob should be empty');
     end;
+
+    [Test]
+    procedure SetResultErrorsBeforeInit()
+    // [SCENARIO 1.23] SetResult called before Init raises error
+    var
+        Ctx: Codeunit "PW Chunk Context";
+        Result: JsonObject;
+    begin
+        asserterror Ctx.SetResult(Result);
+
+        LibraryAssert.ExpectedError('Chunk context has not been initialized.');
+    end;
+
+    [Test]
+    procedure AppendResultErrorsBeforeInit()
+    // [SCENARIO 1.24] AppendResult called before Init raises error
+    var
+        Ctx: Codeunit "PW Chunk Context";
+        Result: JsonObject;
+    begin
+        asserterror Ctx.AppendResult(Result);
+
+        LibraryAssert.ExpectedError('Chunk context has not been initialized.');
+    end;
+
+    [Test]
+    procedure GetRecordRefErrorsWhenRecordSetIsEmpty()
+    // [SCENARIO 1.25] GetRecordRef fails loudly when the chunk's filtered set is now empty
+    var
+        Ctx: Codeunit "PW Chunk Context";
+        Chunk: Record "PW Batch Chunk";
+        SourceBatch: Record "PW Batch";
+        SourceRef: RecordRef;
+        TargetRef: RecordRef;
+        BatchId: Guid;
+        Payload: JsonObject;
+    begin
+        SourceBatch.SetRange("Company Name", 'PW_CTX_EMPTY');
+        SourceRef.GetTable(SourceBatch);
+
+        Payload.Add('$IsRecordChunk', true);
+        Payload.Add('$TableNo', Database::"PW Batch");
+        Payload.Add('$FilterView', SourceRef.GetView());
+        Payload.Add('$StartIndex', 1);
+        Payload.Add('$EndIndex', 5);
+        BatchId := TestHelper.CreateBatch("PW Batch Status"::Running);
+        TestHelper.CreateChunkWithPayload(BatchId, 1, Payload);
+        Chunk.Get(BatchId, 1);
+        Ctx.Init(Chunk);
+
+        asserterror Ctx.GetRecordRef(TargetRef);
+
+        LibraryAssert.ExpectedError('no longer matches the data');
+    end;
+
+    [Test]
+    procedure GetRecordRefErrorsWhenRecordSetShrank()
+    // [SCENARIO 1.26] GetRecordRef fails loudly when the set has fewer records
+    // than the chunk's start index — positioning would silently overlap another chunk
+    var
+        Ctx: Codeunit "PW Chunk Context";
+        Chunk: Record "PW Batch Chunk";
+        SourceBatch: Record "PW Batch";
+        SourceRef: RecordRef;
+        TargetRef: RecordRef;
+        BatchId: Guid;
+        Payload: JsonObject;
+        i: Integer;
+    begin
+        SourceBatch.SetRange("Company Name", 'PW_CTX_SHRUNK');
+        SourceBatch.DeleteAll();
+        for i := 1 to 2 do begin
+            Clear(SourceBatch);
+            SourceBatch.Id := CreateGuid();
+            SourceBatch.Status := "PW Batch Status"::Pending;
+            SourceBatch."Company Name" := 'PW_CTX_SHRUNK';
+            SourceBatch.Insert();
+        end;
+
+        SourceBatch.Reset();
+        SourceBatch.SetRange("Company Name", 'PW_CTX_SHRUNK');
+        SourceRef.GetTable(SourceBatch);
+
+        // Chunk expects to start at record 5 but only 2 records exist
+        Payload.Add('$IsRecordChunk', true);
+        Payload.Add('$TableNo', Database::"PW Batch");
+        Payload.Add('$FilterView', SourceRef.GetView());
+        Payload.Add('$StartIndex', 5);
+        Payload.Add('$EndIndex', 6);
+        BatchId := TestHelper.CreateBatch("PW Batch Status"::Running);
+        TestHelper.CreateChunkWithPayload(BatchId, 1, Payload);
+        Chunk.Get(BatchId, 1);
+        Ctx.Init(Chunk);
+
+        asserterror Ctx.GetRecordRef(TargetRef);
+
+        LibraryAssert.ExpectedError('no longer matches the data');
+
+        SourceBatch.Reset();
+        SourceBatch.SetRange("Company Name", 'PW_CTX_SHRUNK');
+        SourceBatch.DeleteAll();
+    end;
 }

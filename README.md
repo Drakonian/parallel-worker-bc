@@ -52,13 +52,11 @@ codeunit 50100 "Exchange Rate Worker" implements "PW IParallel Worker"
         BaseCurrency: Text;
         CurrencyCode: Text;
         Rate: Decimal;
-        i: Integer;
     begin
         Items := Ctx.GetItems();                          // currencies assigned to this chunk
         BaseCurrency := Ctx.GetTextInput('BaseCurrency'); // shared payload, same for every chunk
 
-        for i := 1 to Items.Count() do begin
-            Items.Get(i, Token);
+        foreach Token in Items do begin                   // JsonArray is 0-based — prefer foreach over index loops
             CurrencyCode := Token.AsValue().AsText();
             Rate := FetchRateFromApi(BaseCurrency, CurrencyCode); // your HTTP call
             Rates.Add(CurrencyCode, Rate);
@@ -86,7 +84,7 @@ enumextension 50100 "My Worker Types" extends "PW Worker Type"
 
 ### 3. Run it
 
-`RunAndWaitForList` runs the batch, blocks until it finishes, collects results, and cleans up — one call for the common case.
+`RunAndWaitForList` runs the batch, blocks until it finishes, and collects results — one call for the common case. Batch records are kept for monitoring by default; use the `AutoCleanup` overload or `Cleanup(BatchId)` to delete them.
 
 ```al
 procedure RefreshExchangeRates()
@@ -267,13 +265,10 @@ procedure Execute(var Ctx: Codeunit "PW Chunk Context")
 var
     Items: JsonArray;
     Token: JsonToken;
-    i: Integer;
 begin
     Items := Ctx.GetItems();
-    for i := 1 to Items.Count() do begin
-        Items.Get(i, Token);
+    foreach Token in Items do // JsonArray is 0-based — prefer foreach over index loops
         ProcessItem(Token.AsValue().AsText());
-    end;
 end;
 
 // Caller
@@ -327,26 +322,34 @@ var
     Coordinator: Codeunit "PW Batch Coordinator";
 begin
     BatchId := Coordinator
-        .SetThreads(8)           // Background sessions (default: 4)
+        .SetThreads(8)           // Background sessions (default: 4, must be >= 1)
         .SetBatchTimeout(60)     // Caller stops waiting after 60s — sessions keep running (default: 0 = wait forever)
-        .SetSessionTimeout(30000)// Platform kills any session after 30s — dead sessions auto-detected (default: 0 = no limit)
+        .SetSessionTimeout(30000)// Platform kills any session after 30s — dead sessions auto-detected (default: 0 = server default)
         .SetPollInterval(200)    // Polling interval in ms (default: 500)
         .RunForList(...);
 ```
 
 All four methods return `this`, so you can chain them.
 
-### Simple API (run + wait + collect + cleanup in one call)
+### Simple API (run + wait + collect in one call)
 
 | Method | Description |
 |---|---|
-| `RunAndWaitForList(WorkerType, Items, var Results): Boolean` | Split a list, wait, collect results, clean up |
+| `RunAndWaitForList(WorkerType, Items, var Results): Boolean` | Split a list, wait, collect results |
 | `RunAndWaitForList(WorkerType, Items, Payload, var Results): Boolean` | Same, with additional payload merged into each chunk |
-| `RunAndWaitForRecords(WorkerType, RecRef, var Results): Boolean` | Split records, wait, collect results, clean up |
+| `RunAndWaitForList(WorkerType, Items, Payload, AutoCleanup, var Results): Boolean` | Same, deletes batch records when done if `AutoCleanup` is true |
+| `RunAndWaitForList(WorkerType, Items, Payload, AutoCleanup, var Results, var Errors): Boolean` | Same, also collects error messages from failed chunks |
+| `RunAndWaitForRecords(WorkerType, RecRef, var Results): Boolean` | Split records, wait, collect results |
 | `RunAndWaitForRecords(WorkerType, RecRef, Payload, var Results): Boolean` | Same, with additional payload merged into each chunk |
-| `RunAndWaitForChunks(WorkerType, Chunks, var Results): Boolean` | Run chunks, wait, collect results, clean up |
+| `RunAndWaitForRecords(WorkerType, RecRef, Payload, AutoCleanup, var Results): Boolean` | Same, deletes batch records when done if `AutoCleanup` is true |
+| `RunAndWaitForRecords(WorkerType, RecRef, Payload, AutoCleanup, var Results, var Errors): Boolean` | Same, also collects error messages from failed chunks |
+| `RunAndWaitForChunks(WorkerType, Chunks, var Results): Boolean` | Run chunks, wait, collect results |
+| `RunAndWaitForChunks(WorkerType, Chunks, AutoCleanup, var Results): Boolean` | Same, deletes batch records when done if `AutoCleanup` is true |
+| `RunAndWaitForChunks(WorkerType, Chunks, AutoCleanup, var Results, var Errors): Boolean` | Same, also collects error messages from failed chunks |
 
-Returns `true` if all chunks succeeded. On failure, `Results` is empty — use the granular API below if you need error details or retry.
+Returns `true` if all chunks succeeded, `false` on failure, partial failure, or timeout. On partial failure, `Results` still contains the output of the chunks that completed, and the `Errors` overloads collect the failure messages. Batch records are kept for monitoring unless `AutoCleanup` is `true` — use the granular API below if you need retry.
+
+Empty input (empty list, empty record set, no chunks) is a no-op: the method returns `true` with empty `Results`.
 
 ### Granular API (for non-blocking, retry, progress polling)
 
@@ -360,11 +363,13 @@ Returns `true` if all chunks succeeded. On failure, `Results` is empty — use t
 | `RunForRecords(WorkerType, RecRef, Payload): Guid` | Same, with additional payload merged into each chunk |
 | `RunForChunks(WorkerType, Chunks): Guid` | One chunk per JsonObject, no auto-splitting |
 
+All `RunFor*` methods return a **null GUID** when there is nothing to process (empty list, empty record set, no chunks) — check with `IsNullGuid` before using the granular API. `WaitForCompletion` treats a null GUID as success. Payload keys prefixed with `$` are reserved for the framework and rejected with an error.
+
 **Waiting & Status:**
 
 | Method | Description |
 |---|---|
-| `WaitForCompletion(BatchId): Boolean` | Block until batch finishes. Returns `true` if all chunks succeeded. |
+| `WaitForCompletion(BatchId): Boolean` | Block until batch finishes. Returns `true` if all chunks succeeded. Must not be called inside a write transaction — its recovery paths commit internally. |
 | `IsFinished(BatchId): Boolean` | Non-blocking check. |
 | `GetStatus(BatchId): Enum "PW Batch Status"` | Current status: `Running`, `Completed`, `PartialFailure`, `Failed`. |
 | `GetCompletedChunks(BatchId): Integer` | Number of successfully completed chunks. |
@@ -382,7 +387,7 @@ Returns `true` if all chunks succeeded. On failure, `Results` is empty — use t
 
 | Method | Description |
 |---|---|
-| `Cleanup(BatchId)` | Deletes the batch and all its chunk records. |
+| `Cleanup(BatchId)` | Deletes the batch and all its chunk records. Safe to call while sessions are still running — their outcomes are simply discarded. |
 
 ## Chunk Context API
 
@@ -441,7 +446,7 @@ The library enforces strict transaction boundaries:
 2. **Workers cannot call Commit().** The dispatcher wraps your `Execute` call with `[CommitBehavior(CommitBehavior::Error)]`. If your worker tries to commit, a runtime error is raised and the chunk is marked as Failed.
 
 3. **Every Commit is documented.** Every `Commit()` call has an inline comment explaining why it exists:
-   - Coordinator: 1 per `RunFor*` call (persist batch + chunks before `StartSession`). If any `StartSession` call fails, 2 additional commits handle failed chunk statuses and batch counter updates with `UpdLock`.
+   - Coordinator: 2 per `RunFor*` call (persist batch + chunks before `StartSession`; persist chunk session ids after all sessions are started). If any `StartSession` call fails, one more commit recounts batch counters with `UpdLock`. During `WaitForCompletion`, dead-session recovery and stalled-counter reconciliation commit when they repair state — which is why `WaitForCompletion` also refuses to run inside a write transaction.
    - Dispatcher: 3 per chunk at runtime (persist Running status, persist Completed/Failed status, release UpdLock after counter update)
 
 ```mermaid
@@ -453,24 +458,26 @@ flowchart TD
         A2 -->|"No"| A4["INSERT Batch + Chunks"]
         A4 --> A5["COMMIT 1\nPersist records — StartSession\nfires immediately, sessions must\nfind chunk records on startup"]
         A5 --> A6["StartSession × N"]
+        A6 --> A7["COMMIT 2\nPersist chunk session ids —\ndead-session recovery needs them\nfor chunks that never reach Running"]
     end
 
     subgraph dispatcher["Dispatcher — background session, per chunk"]
         direction TB
-        B1["Mark chunk → Running"] --> B2["COMMIT 2\nRunning status visible to caller\npolling with ReadUncommitted"]
+        B1["Claim chunk (UpdLock)\nonly if still Pending\nMark chunk → Running"] --> B2["COMMIT 3\nRunning status visible to caller\npolling with ReadUncommitted"]
         B2 --> B3["Codeunit.Run WorkerRunner\nCommitBehavior::Error applied:\nworker Commit() → runtime error"]
         B3 -->|"Success"| B4["Save results, mark Completed"]
         B3 -->|"Error"| B5["Codeunit.Run rolls back all\nworker DB changes \nRe-read chunk, capture error\nMark Failed"]
-        B4 --> B6["COMMIT 3\nPersist chunk outcome\nbefore taking batch lock"]
+        B4 --> B6["COMMIT 4\nPersist chunk outcome\nbefore taking batch lock"]
         B5 --> B6
         B6 --> B7["UpdLock on Batch row\nRecount chunk statuses\nSet terminal status if all done"]
-        B7 --> B8["COMMIT 4\nRelease lock, next dispatcher\nwaiting on UpdLock can proceed"]
+        B7 --> B8["COMMIT 5\nRelease lock, next dispatcher\nwaiting on UpdLock can proceed"]
     end
 
     A6 -.->|"starts"| B1
 
     style A3 fill:#FEF2F2,stroke:#EF4444
     style A5 fill:#DBEAFE,stroke:#3B82F6
+    style A7 fill:#DBEAFE,stroke:#3B82F6
     style B2 fill:#DBEAFE,stroke:#3B82F6
     style B6 fill:#DBEAFE,stroke:#3B82F6
     style B8 fill:#DBEAFE,stroke:#3B82F6
@@ -501,7 +508,13 @@ flowchart TD
 
 When `SetSessionTimeout` is configured, the platform kills background sessions that exceed the time limit. However, this is a hard kill — the dispatcher's error handling never runs, leaving the chunk stuck in `Running` status.
 
-`WaitForCompletion` handles this automatically. After the session timeout plus a short margin, it checks each `Running` chunk using `Session.IsSessionActive`. If the session is dead, the chunk is marked `Failed` with a "Session terminated" error message, and batch counters are recounted using the same UpdLock pattern as `UpdateBatchCounters`. This ensures the batch reaches a terminal status (`Failed` or `PartialFailure`) even when sessions are killed by timeout.
+`WaitForCompletion` handles this automatically. After the session timeout plus a short startup margin, it checks each unfinished chunk using `Session.IsSessionActive`, and keeps re-checking every couple of seconds — sessions start (and die) at different times, so a single check would miss late deaths. The coordinator records each chunk's session id when it starts the sessions, so even a `Pending` chunk whose session was killed before it could report `Running` is recovered. Dead chunks are marked `Failed` with a "Session terminated" error message, and batch counters are recounted using the same UpdLock pattern as `UpdateBatchCounters`. This ensures the batch reaches a terminal status (`Failed` or `PartialFailure`) even when sessions are killed by timeout.
+
+Note: `Session.IsSessionActive` is evaluated on the server instance running `WaitForCompletion`. In multi-node clusters, poll from the session that started the batch (the default blocking pattern does this) to avoid false positives.
+
+### Stalled Counter Reconciliation
+
+Independently of session timeouts, `WaitForCompletion` also repairs a rarer failure: a dispatcher that dies *between* committing its chunk's terminal status and updating the batch counters (for example, a lock timeout on the batch row). If every chunk has reached a committed terminal status while the batch row still says `Running` for two consecutive polls, the counters are recounted under `UpdLock` and the batch is moved to its terminal status — so the polling loop can never hang on a batch whose work is actually done.
 
 ### Timeout Behavior
 
@@ -626,6 +639,7 @@ begin
         // Collect failed chunk inputs and retry them
         Coordinator.GetFailedChunkInputs(BatchId, FailedInputs);
         Coordinator.Cleanup(BatchId);
+        Commit(); // Cleanup leaves a write transaction open — RunFor* refuses to start inside one
 
         // Retry: use RunForChunks with the original payloads
         Clear(Chunks);
@@ -676,6 +690,8 @@ The library ships with two pages for observing batch execution:
 
 `PW Batch Cleanup` (codeunit 99003) can be scheduled as a **Job Queue Entry**. By default, its `OnRun` trigger deletes all finished batches older than 24 hours. You can also call `CleanupOlderThan(Hours)` directly.
 
+Only batches in a terminal status are deleted. Batches stuck in `Running` (for example, after a server restart killed their sessions) are never touched by the job — clean those up from the **PW Batches** page.
+
 ## Worker Guidelines
 
 ### Do
@@ -709,15 +725,28 @@ The library ships with two pages for observing batch execution:
 | Codeunit | 99004 | PW Worker Runner | Internal |
 | Page | 99000 | PW Batches | Public |
 | Page | 99001 | PW Batch Chunk List | Public |
+| PermissionSet | 99000 | PW Parallel Worker | Assignable |
+| Codeunit | 99100 | PW Sample Worker | Internal (sample) |
+| Codeunit | 99101 | PW Sample Record Counter | Internal (sample) |
+| Codeunit | 99102 | PW Sample Runner | Internal (sample) |
+| Codeunit | 99103 | PW Sample Table Counter | Internal (sample) |
+| Page | 99100 | PW Demo | Sample |
+| EnumExt | 99100 | PW Sample Worker Type | Sample |
 
 ## Known Constraints
 
-1. **No restart survival.** Background sessions created via `StartSession` don't survive server restarts. If the service restarts mid-batch, running chunks will be stuck. Use the monitoring pages to identify and clean up stuck batches.
+1. **No restart survival.** Background sessions created via `StartSession` don't survive server restarts. If the service restarts mid-batch, running chunks will be stuck. The scheduled cleanup job only removes finished batches — use the monitoring pages to identify and clean up stuck ones.
 
-2. **No cancellation.** Once a batch is started, there's no way to cancel running chunks. You can wait for them to finish, let `SetBatchTimeout` stop polling, or use `SetSessionTimeout` to have the platform kill sessions that exceed a time limit.
+2. **No cancellation.** Once a batch is started, there's no way to cancel running chunks. You can wait for them to finish, let `SetBatchTimeout` stop polling, or use `SetSessionTimeout` to have the platform kill sessions that exceed a time limit. Calling `Cleanup` on a live batch is safe, but the running chunks' outcomes are discarded.
 
 3. **No cross-chunk communication.** Each chunk is fully isolated. If you need map-reduce style aggregation, do the "reduce" step in your caller after `GetResults`.
 
 4. **Session limits.** Business Central has per-tenant limits on concurrent background sessions. Don't set thread count too high — 4-8 is typically sufficient.
 
-5. **Commit required before RunFor\*.** The coordinator must commit internally. You cannot have pending write transactions when calling any `RunFor*` method.
+5. **Commit required before RunFor\*.** The coordinator must commit internally. You cannot have pending write transactions when calling any `RunFor*` method — nor when calling `WaitForCompletion`, whose recovery paths also commit.
+
+6. **Stable record sets for RunForRecords.** Chunk ranges are positional (record index within the filtered set at batch creation time). If records matching the filter are inserted or deleted while the batch runs, affected workers fail with a "record range no longer matches the data" error instead of silently processing another chunk's records. Run record batches on data that is stable for the duration of the batch.
+
+7. **Reserved payload keys.** Payload keys prefixed with `$` (`$Items`, `$TableNo`, `$FilterView`, `$StartIndex`, `$EndIndex`, `$IsRecordChunk`) are reserved for the framework. `RunForList` and `RunForRecords` reject payloads containing them.
+
+8. **Batch timeout defaults to waiting forever.** With `SetBatchTimeout` unset (0), `WaitForCompletion` polls until the batch reaches a terminal status. The recovery mechanisms above make a permanently-`Running` batch very unlikely, but for defense in depth set an explicit batch timeout in unattended code.

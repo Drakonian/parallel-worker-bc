@@ -8,7 +8,15 @@ codeunit 99002 "PW Task Dispatcher"
         ErrorText: Text;
         ErrorCallStack: Text;
     begin
+        // UpdLock serializes the claim with the coordinator storing this chunk's
+        // session id in StartBatch and with dead-session recovery — a plain read
+        // could hit an optimistic-concurrency error on the Modify below.
+        Rec.ReadIsolation := IsolationLevel::UpdLock;
         if not Rec.Get(Rec."Batch Id", Rec."Chunk Index") then
+            exit;
+        // Dead-session recovery may have already failed a chunk whose session
+        // was queued for too long — never resurrect a chunk that left Pending.
+        if Rec.Status <> "PW Chunk Status"::Pending then
             exit;
 
         Rec.Status := "PW Chunk Status"::Running;
@@ -29,21 +37,26 @@ codeunit 99002 "PW Task Dispatcher"
         if Codeunit.Run(Codeunit::"PW Worker Runner", Rec) then begin
             // Worker succeeded — results already saved by PW Worker Runner.
             // Re-read to pick up changes made inside Codeunit.Run.
-            Rec.Get(Rec."Batch Id", Rec."Chunk Index");
+            // The chunk disappears if the caller ran Cleanup mid-batch —
+            // nothing left to persist.
+            if not Rec.Get(Rec."Batch Id", Rec."Chunk Index") then
+                exit;
             Rec.Status := "PW Chunk Status"::Completed;
             Rec."Completed At" := CurrentDateTime();
             Rec.Modify();
             // Persist chunk's Completed status before updating batch counters.
             // If UpdateBatchCounters fails (e.g. lock timeout on PW Batch),
             // the chunk is still correctly marked as Completed.
-            // The next finishing chunk will recompute counters correctly.
+            // WaitForCompletion reconciles the counters if no chunk finishes after this one.
             Commit();
         end else begin
             // Worker failed — Codeunit.Run rolled back all DB changes.
-            // Re-read to ensure Rec is clean, consistent with the success branch.
-            Rec.Get(Rec."Batch Id", Rec."Chunk Index");
+            // Capture the error before any further record operations,
+            // then re-read to ensure Rec is clean, consistent with the success branch.
             ErrorText := GetLastErrorText();
             ErrorCallStack := GetLastErrorCallStack();
+            if not Rec.Get(Rec."Batch Id", Rec."Chunk Index") then
+                exit;
             Rec."Error Message" := CopyStr(ErrorText, 1, MaxStrLen(Rec."Error Message"));
             WriteFullErrorMessage(Rec, ErrorText);
             WriteErrorCallStack(Rec, ErrorCallStack);
@@ -83,7 +96,9 @@ codeunit 99002 "PW Task Dispatcher"
         // UpdLock on the Batch row serializes concurrent counter updates
         // without disabling Tri-State Locking for the entire table.
         Batch.ReadIsolation := IsolationLevel::UpdLock;
-        Batch.Get(BatchId);
+        // The batch disappears if the caller ran Cleanup mid-batch.
+        if not Batch.Get(BatchId) then
+            exit;
 
         // ReadCommitted ensures we see committed chunk statuses only.
         // Each dispatcher commits its chunk status before calling this procedure.
