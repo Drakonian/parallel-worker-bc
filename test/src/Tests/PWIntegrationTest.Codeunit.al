@@ -1299,4 +1299,77 @@ codeunit 99209 "PW Integration Test"
     end;
 
     #endregion
+
+    #region Session tracking & mid-batch cleanup
+
+    [Test]
+    procedure SessionIdStoredOnChunksAtStart()
+    // [SCENARIO 17.1] RunForList persists each chunk's session id before returning,
+    // so dead-session recovery also covers chunks that never reach Running
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Chunk: Record "PW Batch Chunk";
+        Items: List of [Text];
+        Payload: JsonObject;
+        BatchId: Guid;
+    begin
+        Items.Add('A');
+        Items.Add('B');
+        Payload.Add('WorkDurationMs', 1000);
+
+        BatchId := Coordinator
+            .SetThreads(2)
+            .SetBatchTimeout(30)
+            .RunForList("PW Worker Type"::Sample, Items, Payload);
+
+        Chunk.SetRange("Batch Id", BatchId);
+        Chunk.SetRange("Session Id", 0);
+        LibraryAssert.IsTrue(Chunk.IsEmpty(), 'Every chunk should carry a session id right after RunForList');
+
+        Coordinator.WaitForCompletion(BatchId);
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure CleanupWhileSessionsRunningIsSafe()
+    // [SCENARIO 17.2] Cleanup during a live batch removes all records; orphaned
+    // sessions end quietly and the framework keeps working afterwards
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Batch: Record "PW Batch";
+        Chunk: Record "PW Batch Chunk";
+        Items: List of [Text];
+        Payload: JsonObject;
+        Results: List of [JsonObject];
+        BatchId: Guid;
+    begin
+        Items.Add('Slow');
+        Payload.Add('WorkDurationMs', 2000);
+        BatchId := Coordinator
+            .SetThreads(1)
+            .RunForList("PW Worker Type"::Sample, Items, Payload);
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+
+        LibraryAssert.IsFalse(Batch.Get(BatchId), 'Batch record should be gone');
+        Chunk.SetRange("Batch Id", BatchId);
+        LibraryAssert.AreEqual(0, Chunk.Count(), 'Chunk records should be gone');
+
+        // Give the orphaned session time to hit the missing-record guards and end quietly
+        Sleep(3000);
+
+        Clear(Items);
+        Items.Add('X');
+        LibraryAssert.IsTrue(
+            Coordinator.SetThreads(1).SetBatchTimeout(30).RunAndWaitForList(
+                "PW Worker Type"::TestWorker, Items, Results),
+            'A batch started after a mid-flight cleanup should still complete');
+        LibraryAssert.AreEqual(1, Results.Count(), 'Should have 1 result');
+
+        Commit();
+    end;
+
+    #endregion
 }

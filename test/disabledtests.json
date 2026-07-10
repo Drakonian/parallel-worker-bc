@@ -202,5 +202,17 @@
         "codeunitId":  99209,
         "codeunitName":  "PW Integration Test",
         "method":  "BatchTimeoutReturnsFalseButSessionContinues"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "SessionIdStoredOnChunksAtStart"
+    },
+    {
+        "bug":  "Need to set isolation disabled test runner. Currently not supported by AL-Go.",
+        "codeunitId":  99209,
+        "codeunitName":  "PW Integration Test",
+        "method":  "CleanupWhileSessionsRunningIsSafe"
     }
 ]

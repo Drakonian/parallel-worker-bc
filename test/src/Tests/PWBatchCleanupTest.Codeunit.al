@@ -127,6 +127,24 @@ codeunit 99203 "PW Batch Cleanup Test"
     end;
 
     [Test]
+    procedure CleanupOlderThanLargeHoursDoesNotOverflow()
+    // [SCENARIO 5.9] Hours large enough to overflow 32-bit millisecond math
+    // (Hours * 3600000 > MaxInt at ~596 hours) is handled without a runtime error
+    var
+        Cleanup: Codeunit "PW Batch Cleanup";
+        Batch: Record "PW Batch";
+        BatchId: Guid;
+    begin
+        BatchId := TestHelper.CreateBatchWithTimestamp(
+            "PW Batch Status"::Completed,
+            CurrentDateTime() - (48 * 3600000));
+
+        Cleanup.CleanupOlderThan(100000);
+
+        LibraryAssert.IsTrue(Batch.Get(BatchId), '48h-old batch should survive a 100000h threshold');
+    end;
+
+    [Test]
     procedure MixedScenarioDeletesOnlyOldFinished()
     // [SCENARIO 5.7] Mixed — only old finished batches are deleted
     var

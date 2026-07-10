@@ -10,17 +10,23 @@ codeunit 99000 "PW Batch Coordinator"
         BatchTimeoutSeconds: Integer;
         SessionTimeoutMs: Integer;
         PollIntervalMs: Integer;
-        DeadSessionChecked: Boolean;
+        NextDeadSessionCheckAt: DateTime;
+        StalledBatchSeen: Boolean;
         WriteTransactionErr: Label 'Cannot start a parallel batch while a write transaction is active. Commit or rollback your changes before calling RunFor* methods, otherwise they would be silently committed.';
+        WaitWriteTransactionErr: Label 'Cannot wait for a parallel batch while a write transaction is active. WaitForCompletion may commit internally during recovery, which would silently commit your changes.';
         SessionTerminatedErr: Label 'Session terminated (timeout or server stop).';
+        InvalidThreadCountErr: Label 'Thread count must be at least 1.';
+        ReservedKeyErr: Label 'The payload key %1 is not allowed. Keys prefixed with $ are reserved for the framework.', Comment = '%1 = JSON key name';
 
     /// <summary>
     /// Sets the number of parallel threads (background sessions) to use.
     /// </summary>
-    /// <param name="Count">The number of threads. Defaults to 4 if not set.</param>
+    /// <param name="Count">The number of threads. Must be at least 1. Defaults to 4 if not set.</param>
     /// <returns>The current instance for fluent chaining.</returns>
     procedure SetThreads(Count: Integer): Codeunit "PW Batch Coordinator"
     begin
+        if Count < 1 then
+            Error(InvalidThreadCountErr);
         ThreadCount := Count;
         exit(this);
     end;
@@ -43,7 +49,7 @@ codeunit 99000 "PW Batch Coordinator"
     /// If a session exceeds this duration, the platform terminates it and the chunk is marked as Failed.
     /// This is a server-side timeout — protects against hung or runaway workers.
     /// </summary>
-    /// <param name="Milliseconds">The timeout in milliseconds. Zero or unset means no limit.</param>
+    /// <param name="Milliseconds">The timeout in milliseconds. Zero or unset leaves the platform's default background session timeout in charge.</param>
     /// <returns>The current instance for fluent chaining.</returns>
     procedure SetSessionTimeout(Milliseconds: Integer): Codeunit "PW Batch Coordinator"
     begin
@@ -100,6 +106,7 @@ codeunit 99000 "PW Batch Coordinator"
         i: Integer;
     begin
         GuardNoWriteTransaction();
+        AssertNoReservedKeys(BasePayload);
 
         TotalCount := RecRef.Count();
         if TotalCount = 0 then
@@ -180,6 +187,7 @@ codeunit 99000 "PW Batch Coordinator"
         j: Integer;
     begin
         GuardNoWriteTransaction();
+        AssertNoReservedKeys(BasePayload);
 
         if Items.Count() = 0 then
             exit;
@@ -254,6 +262,7 @@ codeunit 99000 "PW Batch Coordinator"
     /// </summary>
     /// <param name="BatchId">The batch identifier returned by a RunFor* method.</param>
     /// <returns>True if the batch completed successfully; false on failure, partial failure, or timeout.</returns>
+    /// <remarks>Must not be called while a write transaction is active — recovery paths commit internally.</remarks>
     procedure WaitForCompletion(BatchId: Guid): Boolean
     var
         Batch: Record "PW Batch";
@@ -263,6 +272,11 @@ codeunit 99000 "PW Batch Coordinator"
         if IsNullGuid(BatchId) then
             exit(true);
 
+        // Recovery below commits internally, which would silently persist any
+        // pending caller changes — same rule as the RunFor* methods.
+        if Database.IsInWriteTransaction() then
+            Error(WaitWriteTransactionErr);
+
         // ReadUncommitted prevents polling from being blocked by
         // the dispatcher's UpdLock in UpdateBatchCounters.
         // Slightly stale data is acceptable — we retry every PollInterval.
@@ -270,7 +284,8 @@ codeunit 99000 "PW Batch Coordinator"
 
         Interval := GetEffectivePollInterval();
         StartTime := CurrentDateTime();
-        DeadSessionChecked := false;
+        NextDeadSessionCheckAt := 0DT;
+        StalledBatchSeen := false;
 
         repeat
             if not Batch.Get(BatchId) then
@@ -287,6 +302,8 @@ codeunit 99000 "PW Batch Coordinator"
             // check for sessions killed by the platform (hard kill leaves chunks in Running).
             if ShouldCheckDeadSessions(StartTime) then
                 RecoverDeadSessions(BatchId);
+
+            ReconcileStalledBatch(BatchId);
 
             if (BatchTimeoutSeconds > 0) and ((CurrentDateTime() - StartTime) > BatchTimeoutSeconds * 1000) then
                 exit(false);
@@ -392,7 +409,6 @@ codeunit 99000 "PW Batch Coordinator"
     var
         Chunk: Record "PW Batch Chunk";
         InStream: InStream;
-        FullError: Text;
     begin
         Clear(Errors);
         Chunk.SetAutoCalcFields("Full Error Message");
@@ -402,8 +418,7 @@ codeunit 99000 "PW Batch Coordinator"
             repeat
                 if Chunk."Full Error Message".HasValue() then begin
                     Chunk."Full Error Message".CreateInStream(InStream, TextEncoding::UTF8);
-                    InStream.ReadText(FullError);
-                    Errors.Add(FullError);
+                    Errors.Add(ReadBlobText(InStream));
                 end else
                     if Chunk."Error Message" <> '' then
                         Errors.Add(Chunk."Error Message");
@@ -657,14 +672,6 @@ codeunit 99000 "PW Batch Coordinator"
         exit(500);
     end;
 
-    local procedure GetEffectiveSessionTimeout(): Duration
-    begin
-        if SessionTimeoutMs > 0 then
-            exit(SessionTimeoutMs);
-        // 0 means no limit — max Duration effectively disables the timeout
-        exit(0);
-    end;
-
     local procedure WriteFullErrorToChunk(var Chunk: Record "PW Batch Chunk"; ErrorText: Text)
     var
         OutStream: OutStream;
@@ -673,14 +680,53 @@ codeunit 99000 "PW Batch Coordinator"
         OutStream.WriteText(ErrorText);
     end;
 
+    local procedure ReadBlobText(InStream: InStream): Text
+    var
+        Builder: TextBuilder;
+        Line: Text;
+    begin
+        // ReadText stops at line breaks — loop to preserve multi-line content.
+        while not InStream.EOS() do begin
+            InStream.ReadText(Line);
+            if Builder.Length() > 0 then
+                Builder.Append(NewLineText());
+            Builder.Append(Line);
+        end;
+        exit(Builder.ToText());
+    end;
+
+    local procedure NewLineText(): Text
+    var
+        LineFeed: Char;
+    begin
+        LineFeed := 10;
+        exit(Format(LineFeed));
+    end;
+
+    local procedure AssertNoReservedKeys(BasePayload: JsonObject)
+    var
+        PayloadKey: Text;
+    begin
+        foreach PayloadKey in BasePayload.Keys() do
+            if PayloadKey.StartsWith('$') then
+                Error(ReservedKeyErr, PayloadKey);
+    end;
+
     local procedure ShouldCheckDeadSessions(StartTime: DateTime): Boolean
+    var
+        ArmDelay: Duration;
     begin
         if SessionTimeoutMs <= 0 then
             exit(false);
-        if DeadSessionChecked then
+        // Arm after session timeout + 2s margin for session startup overhead.
+        // Duration arithmetic avoids Integer overflow near MaxInt timeouts.
+        ArmDelay := SessionTimeoutMs;
+        ArmDelay += 2000;
+        if (CurrentDateTime() - StartTime) <= ArmDelay then
             exit(false);
-        // Check after session timeout + 2s margin for session startup overhead
-        exit((CurrentDateTime() - StartTime) > (SessionTimeoutMs + 2000));
+        // Sessions start — and die — at different times (queued sessions,
+        // staggered starts), so re-check periodically rather than once.
+        exit(CurrentDateTime() >= NextDeadSessionCheckAt);
     end;
 
     local procedure RecoverDeadSessions(BatchId: Guid)
@@ -688,32 +734,80 @@ codeunit 99000 "PW Batch Coordinator"
         Chunk: Record "PW Batch Chunk";
         AnyRecovered: Boolean;
     begin
-        DeadSessionChecked := true;
+        NextDeadSessionCheckAt := CurrentDateTime() + 2000;
 
         Chunk.SetRange("Batch Id", BatchId);
-        Chunk.SetRange(Status, "PW Chunk Status"::Running);
+        Chunk.SetFilter(Status, '%1|%2', "PW Chunk Status"::Pending, "PW Chunk Status"::Running);
+        // Pending chunks carry the session id stored by StartBatch. A session id
+        // of 0 means the session never started — the failed-to-start path in
+        // StartBatch already handles those chunks.
+        Chunk.SetFilter("Session Id", '<>0');
         if Chunk.FindSet() then
             repeat
-                if not Session.IsSessionActive(Chunk."Session Id") then begin
-                    Chunk."Error Message" := CopyStr(SessionTerminatedErr, 1, MaxStrLen(Chunk."Error Message"));
-                    WriteFullErrorToChunk(Chunk, SessionTerminatedErr);
-                    Chunk.Status := "PW Chunk Status"::Failed;
-                    Chunk."Completed At" := CurrentDateTime();
-                    Chunk.Modify();
-                    AnyRecovered := true;
-                end;
+                if not Session.IsSessionActive(Chunk."Session Id") then
+                    if MarkDeadChunkFailed(Chunk."Batch Id", Chunk."Chunk Index") then
+                        AnyRecovered := true;
             until Chunk.Next() = 0;
 
         if AnyRecovered then begin
+            // Persist failed chunk statuses and release their row locks
+            // before taking the batch UpdLock in RecountBatchCounters.
             Commit();
             RecountBatchCounters(BatchId);
         end;
     end;
 
+    local procedure MarkDeadChunkFailed(BatchId: Guid; ChunkIdx: Integer): Boolean
+    var
+        Chunk: Record "PW Batch Chunk";
+    begin
+        // UpdLock + status re-check closes the race where the dispatcher finishes
+        // the chunk between the polling snapshot and this update — a plain Modify
+        // could otherwise fail the version check or overwrite a terminal status.
+        Chunk.ReadIsolation := IsolationLevel::UpdLock;
+        if not Chunk.Get(BatchId, ChunkIdx) then
+            exit(false);
+        if not (Chunk.Status in ["PW Chunk Status"::Pending, "PW Chunk Status"::Running]) then
+            exit(false);
+
+        Chunk."Error Message" := CopyStr(SessionTerminatedErr, 1, MaxStrLen(Chunk."Error Message"));
+        WriteFullErrorToChunk(Chunk, SessionTerminatedErr);
+        Chunk.Status := "PW Chunk Status"::Failed;
+        Chunk."Completed At" := CurrentDateTime();
+        Chunk.Modify();
+        exit(true);
+    end;
+
+    local procedure ReconcileStalledBatch(BatchId: Guid)
+    var
+        Chunk: Record "PW Batch Chunk";
+    begin
+        // A dispatcher that dies between committing its chunk status and updating
+        // the batch counters leaves the batch Running forever. If every chunk has
+        // a committed terminal status while the batch still says Running, recount.
+        // Requiring the condition on two consecutive polls avoids grabbing the
+        // batch UpdLock while the last dispatcher is about to update it anyway.
+        Chunk.ReadIsolation := IsolationLevel::ReadCommitted;
+        Chunk.SetRange("Batch Id", BatchId);
+        Chunk.SetFilter(Status, '%1|%2', "PW Chunk Status"::Pending, "PW Chunk Status"::Running);
+        if not Chunk.IsEmpty() then begin
+            StalledBatchSeen := false;
+            exit;
+        end;
+
+        if not StalledBatchSeen then begin
+            StalledBatchSeen := true;
+            exit;
+        end;
+
+        StalledBatchSeen := false;
+        RecountBatchCounters(BatchId);
+    end;
+
     /// <summary>
     /// Recounts chunk statuses and updates batch counters with UpdLock serialization.
-    /// Shared by StartBatch (failed-to-start recovery) and RecoverDeadSessions.
-    /// Same pattern as UpdateBatchCounters in PW Task Dispatcher.
+    /// Shared by StartBatch (failed-to-start recovery), RecoverDeadSessions and
+    /// ReconcileStalledBatch. Same pattern as UpdateBatchCounters in PW Task Dispatcher.
     /// </summary>
     local procedure RecountBatchCounters(BatchId: Guid)
     var
@@ -723,7 +817,9 @@ codeunit 99000 "PW Batch Coordinator"
         FailedCount: Integer;
     begin
         Batch.ReadIsolation := IsolationLevel::UpdLock;
-        Batch.Get(BatchId);
+        // The batch disappears if the caller runs Cleanup mid-batch.
+        if not Batch.Get(BatchId) then
+            exit;
 
         Chunk.ReadIsolation := IsolationLevel::ReadCommitted;
         Chunk.SetRange("Batch Id", BatchId);
@@ -785,7 +881,9 @@ codeunit 99000 "PW Batch Coordinator"
     var
         Batch: Record "PW Batch";
         Chunk: Record "PW Batch Chunk";
+        StartedSessions: Dictionary of [Integer, Integer];
         SessionId: Integer;
+        ChunkIdx: Integer;
         FailedToStart: Integer;
     begin
         Batch.Get(BatchId);
@@ -793,7 +891,9 @@ codeunit 99000 "PW Batch Coordinator"
         Chunk.SetRange("Batch Id", BatchId);
         if Chunk.FindSet() then
             repeat
-                if not StartSession(SessionId, Codeunit::"PW Task Dispatcher", Batch."Company Name", Chunk, GetEffectiveSessionTimeout()) then begin
+                if StartDispatcherSession(SessionId, Batch."Company Name", Chunk) then
+                    StartedSessions.Add(Chunk."Chunk Index", SessionId)
+                else begin
                     Chunk."Error Message" := CopyStr(GetLastErrorText(), 1, MaxStrLen(Chunk."Error Message"));
                     WriteFullErrorToChunk(Chunk, GetLastErrorText());
                     Chunk.Status := "PW Chunk Status"::Failed;
@@ -803,13 +903,44 @@ codeunit 99000 "PW Batch Coordinator"
                 end;
             until Chunk.Next() = 0;
 
-        if FailedToStart > 0 then begin
-            // Commit failed-to-start chunk statuses first, so background sessions
-            // that are already running can see them in UpdateBatchCounters.
-            // This also releases all locks from the FindSet loop, preventing
-            // deadlocks when we take UpdLock below.
-            Commit();
+        // Session ids are stored after all sessions are started: storing inside
+        // the loop would hold each chunk's row lock for the whole StartSession
+        // sequence and lock-timeout dispatchers on their first read.
+        foreach ChunkIdx in StartedSessions.Keys() do
+            StoreSessionId(BatchId, ChunkIdx, StartedSessions.Get(ChunkIdx));
+
+        // Persist session ids (dead-session recovery needs them for chunks that
+        // never reach Running) and failed-to-start statuses, release all row
+        // locks, and leave the caller without an open write transaction —
+        // RunFor* must return with a clean transaction state.
+        Commit();
+
+        if FailedToStart > 0 then
             RecountBatchCounters(BatchId);
-        end;
+    end;
+
+    local procedure StartDispatcherSession(var NewSessionId: Integer; RunInCompany: Text; var Chunk: Record "PW Batch Chunk"): Boolean
+    begin
+        // An explicit 0 for the timeout parameter is undocumented platform
+        // behavior — when no session timeout is configured, use the overload
+        // that leaves the server default in charge.
+        if SessionTimeoutMs > 0 then
+            exit(StartSession(NewSessionId, Codeunit::"PW Task Dispatcher", RunInCompany, Chunk, SessionTimeoutMs));
+        exit(StartSession(NewSessionId, Codeunit::"PW Task Dispatcher", RunInCompany, Chunk));
+    end;
+
+    local procedure StoreSessionId(BatchId: Guid; ChunkIdx: Integer; NewSessionId: Integer)
+    var
+        Chunk: Record "PW Batch Chunk";
+    begin
+        // UpdLock serializes with the dispatcher claiming this chunk. If the
+        // dispatcher won the race, the chunk is no longer Pending and already
+        // carries its own session id.
+        Chunk.ReadIsolation := IsolationLevel::UpdLock;
+        Chunk.Get(BatchId, ChunkIdx);
+        if Chunk.Status <> "PW Chunk Status"::Pending then
+            exit;
+        Chunk."Session Id" := NewSessionId;
+        Chunk.Modify();
     end;
 }

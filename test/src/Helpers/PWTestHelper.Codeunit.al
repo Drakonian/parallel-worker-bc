@@ -97,4 +97,31 @@ codeunit 99204 "PW Test Helper"
         Chunk.Status := Status;
         Chunk.Insert();
     end;
+
+    procedure CreateChunkWithSession(BatchId: Guid; ChunkIndex: Integer; Status: Enum "PW Chunk Status"; SessionId: Integer)
+    var
+        Chunk: Record "PW Batch Chunk";
+    begin
+        Chunk."Batch Id" := BatchId;
+        Chunk."Chunk Index" := ChunkIndex;
+        Chunk.Status := Status;
+        Chunk."Session Id" := SessionId;
+        Chunk.Insert();
+    end;
+
+    procedure CreateChunkWithFullError(BatchId: Guid; ChunkIndex: Integer; ErrorText: Text)
+    var
+        Chunk: Record "PW Batch Chunk";
+        OutStream: OutStream;
+    begin
+        Chunk."Batch Id" := BatchId;
+        Chunk."Chunk Index" := ChunkIndex;
+        Chunk.Status := "PW Chunk Status"::Failed;
+        Chunk."Error Message" := CopyStr(ErrorText, 1, MaxStrLen(Chunk."Error Message"));
+        Chunk.Insert();
+
+        Chunk."Full Error Message".CreateOutStream(OutStream, TextEncoding::UTF8);
+        OutStream.WriteText(ErrorText);
+        Chunk.Modify();
+    end;
 }

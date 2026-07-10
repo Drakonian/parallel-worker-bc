@@ -177,6 +177,7 @@ codeunit 99202 "PW Coordinator Test"
         BatchId: Guid;
     begin
         BatchId := TestHelper.CreateBatch("PW Batch Status"::Completed);
+        Commit(); // WaitForCompletion requires a clean transaction state
 
         LibraryAssert.IsTrue(Coordinator.WaitForCompletion(BatchId), 'Should return true for completed batch');
     end;
@@ -189,6 +190,7 @@ codeunit 99202 "PW Coordinator Test"
         BatchId: Guid;
     begin
         BatchId := TestHelper.CreateBatch("PW Batch Status"::Failed);
+        Commit(); // WaitForCompletion requires a clean transaction state
 
         LibraryAssert.IsFalse(Coordinator.WaitForCompletion(BatchId), 'Should return false for failed batch');
     end;
@@ -470,6 +472,25 @@ codeunit 99202 "PW Coordinator Test"
     end;
 
     [Test]
+    procedure GetErrorsPreservesMultiLineFullError()
+    // [SCENARIO 3.13] GetErrors returns the full multi-line error, not just the first line
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        BatchId: Guid;
+        Errors: List of [Text];
+        MultiLineError: Text;
+    begin
+        MultiLineError := 'First line' + NewLine() + 'Second line' + NewLine() + 'Third line';
+        BatchId := TestHelper.CreateBatch("PW Batch Status"::Failed);
+        TestHelper.CreateChunkWithFullError(BatchId, 1, MultiLineError);
+
+        Coordinator.GetErrors(BatchId, Errors);
+
+        LibraryAssert.AreEqual(1, Errors.Count(), 'Should return 1 error');
+        LibraryAssert.AreEqual(MultiLineError, Errors.Get(1), 'Multi-line error text should be preserved');
+    end;
+
+    [Test]
     procedure GetFailedChunkInputsReturnsEmptyForNoFailedChunks()
     // [SCENARIO 3.12] GetFailedChunkInputs — no failed chunks returns empty list
     var
@@ -550,4 +571,170 @@ codeunit 99202 "PW Coordinator Test"
     end;
 
     #endregion
+
+    #region Recovery & Liveness
+
+    [Test]
+    procedure WaitForCompletionReconcilesStalledCounters()
+    // [SCENARIO 14.1] All chunks terminal but batch counters stale (dispatcher died
+    // between its chunk commit and the counter update) — WaitForCompletion recounts
+    // and reaches a terminal status instead of polling forever
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        BatchId: Guid;
+    begin
+        BatchId := TestHelper.CreateBatchEx("PW Batch Status"::Running, 2, 1, 0);
+        TestHelper.CreateSimpleChunk(BatchId, 1, "PW Chunk Status"::Completed);
+        TestHelper.CreateSimpleChunk(BatchId, 2, "PW Chunk Status"::Completed);
+        Commit(); // WaitForCompletion requires a clean transaction state
+
+        LibraryAssert.IsTrue(
+            Coordinator.SetPollInterval(50).SetBatchTimeout(10).WaitForCompletion(BatchId),
+            'Stalled batch should be reconciled to Completed');
+        LibraryAssert.IsTrue(
+            Coordinator.GetStatus(BatchId) = "PW Batch Status"::Completed,
+            'Status should be Completed after reconciliation');
+        LibraryAssert.AreEqual(2, Coordinator.GetCompletedChunks(BatchId), 'Counters should be recounted');
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure WaitForCompletionRecoversDeadRunningChunk()
+    // [SCENARIO 14.2] Running chunk whose session no longer exists is marked Failed
+    // once the session timeout plus margin has elapsed
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Errors: List of [Text];
+        BatchId: Guid;
+    begin
+        BatchId := TestHelper.CreateBatchEx("PW Batch Status"::Running, 1, 0, 0);
+        TestHelper.CreateChunkWithSession(BatchId, 1, "PW Chunk Status"::Running, 99999999);
+        Commit(); // WaitForCompletion requires a clean transaction state
+
+        LibraryAssert.IsFalse(
+            Coordinator.SetSessionTimeout(1000).SetPollInterval(100).SetBatchTimeout(15).WaitForCompletion(BatchId),
+            'Batch with a dead running session should fail');
+        LibraryAssert.IsTrue(
+            Coordinator.GetStatus(BatchId) = "PW Batch Status"::Failed,
+            'Status should be Failed');
+
+        Coordinator.GetErrors(BatchId, Errors);
+        LibraryAssert.AreEqual(1, Errors.Count(), 'Should have 1 error from the dead session');
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure WaitForCompletionRecoversDeadPendingChunk()
+    // [SCENARIO 14.3] Pending chunk with a stored session id whose session died
+    // before reaching Running is also recovered — not only Running chunks
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Errors: List of [Text];
+        BatchId: Guid;
+    begin
+        BatchId := TestHelper.CreateBatchEx("PW Batch Status"::Running, 1, 0, 0);
+        TestHelper.CreateChunkWithSession(BatchId, 1, "PW Chunk Status"::Pending, 99999999);
+        Commit(); // WaitForCompletion requires a clean transaction state
+
+        LibraryAssert.IsFalse(
+            Coordinator.SetSessionTimeout(1000).SetPollInterval(100).SetBatchTimeout(15).WaitForCompletion(BatchId),
+            'Batch with a dead pending session should fail');
+        LibraryAssert.IsTrue(
+            Coordinator.GetStatus(BatchId) = "PW Batch Status"::Failed,
+            'Status should be Failed');
+
+        Coordinator.GetErrors(BatchId, Errors);
+        LibraryAssert.AreEqual(1, Errors.Count(), 'Should have 1 error from the dead session');
+
+        Coordinator.Cleanup(BatchId);
+        Commit();
+    end;
+
+    [Test]
+    procedure WaitForCompletionErrorsInsideWriteTransaction()
+    // [SCENARIO 14.4] WaitForCompletion inside a write transaction errors —
+    // its recovery paths commit internally
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        BatchId: Guid;
+    begin
+        BatchId := TestHelper.CreateBatch("PW Batch Status"::Running);
+
+        asserterror Coordinator.WaitForCompletion(BatchId);
+
+        LibraryAssert.ExpectedError('Cannot wait for a parallel batch while a write transaction is active');
+    end;
+
+    #endregion
+
+    #region Configuration Validation
+
+    [Test]
+    procedure SetThreadsRejectsZero()
+    // [SCENARIO 15.1] SetThreads with zero errors instead of silently falling back
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+    begin
+        asserterror Coordinator.SetThreads(0);
+
+        LibraryAssert.ExpectedError('Thread count must be at least 1');
+    end;
+
+    [Test]
+    procedure SetThreadsRejectsNegativeCount()
+    // [SCENARIO 15.2] SetThreads with a negative count errors
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+    begin
+        asserterror Coordinator.SetThreads(-3);
+
+        LibraryAssert.ExpectedError('Thread count must be at least 1');
+    end;
+
+    [Test]
+    procedure RunForListRejectsReservedPayloadKey()
+    // [SCENARIO 15.3] RunForList rejects a payload containing a $-prefixed key
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Items: List of [Text];
+        Payload: JsonObject;
+    begin
+        Items.Add('X');
+        Payload.Add('$Items', 'clash');
+
+        asserterror Coordinator.RunForList("PW Worker Type"::TestWorker, Items, Payload);
+
+        LibraryAssert.ExpectedError('reserved');
+    end;
+
+    [Test]
+    procedure RunForRecordsRejectsReservedPayloadKey()
+    // [SCENARIO 15.4] RunForRecords rejects a payload containing a $-prefixed key
+    var
+        Coordinator: Codeunit "PW Batch Coordinator";
+        Batch: Record "PW Batch";
+        RecRef: RecordRef;
+        Payload: JsonObject;
+    begin
+        RecRef.GetTable(Batch);
+        Payload.Add('$TableNo', 99);
+
+        asserterror Coordinator.RunForRecords("PW Worker Type"::TestRecordWorker, RecRef, Payload);
+
+        LibraryAssert.ExpectedError('reserved');
+    end;
+
+    #endregion
+
+    local procedure NewLine(): Text
+    var
+        LineFeed: Char;
+    begin
+        LineFeed := 10;
+        exit(Format(LineFeed));
+    end;
 }
